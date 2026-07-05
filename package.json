@@ -1,0 +1,14 @@
+{
+  "name": "interview-simulator",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "smoke": "pnpm --filter @sim/server smoke"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

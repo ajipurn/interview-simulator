@@ -1,0 +1,303 @@
+import { randomUUID } from "node:crypto";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  type CompetencySpec,
+  type EngineConfig,
+  generateCandidateFeedback,
+  generateRubric,
+  InterviewEngine,
+  overallScore,
+  scoreInterview,
+} from "@selia/engine";
+import { z } from "@selia/shared";
+import { llmFromEnv, sttFromEnv, ttsFromEnv } from "@selia/voice-core";
+import { type WebSocket, WebSocketServer } from "ws";
+import { LatencyRecorder } from "./latency.js";
+import { type AudioSink, VoicePipeline } from "./pipeline.js";
+
+const PORT = Number(process.env.PORT ?? 4001);
+/** The web client always resamples mic audio to this rate before sending. */
+const CLIENT_SAMPLE_RATE = 16_000;
+
+export interface GameReport {
+  jobTitle: string;
+  candidateName: string;
+  overall: number;
+  competencies: { name: string; score: number; justification: string }[];
+  summary: string;
+  strengths: string[];
+  growthAreas: string[];
+  tips: string;
+}
+
+interface GameSession {
+  id: string;
+  config: EngineConfig;
+  status: "created" | "live" | "scoring" | "done";
+  report: GameReport | null;
+  createdAt: number;
+}
+
+const sessions = new Map<string, GameSession>();
+// ponytail: one-shot in-memory sessions; sweep so a long-lived dev server doesn't leak
+setInterval(
+  () => {
+    const cutoff = Date.now() - 60 * 60_000;
+    for (const [id, s] of sessions) if (s.createdAt < cutoff) sessions.delete(id);
+  },
+  10 * 60_000,
+).unref();
+
+const CORS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+function sendJson(res: ServerResponse, code: number, body: unknown): void {
+  res.writeHead(code, { "Content-Type": "application/json", ...CORS });
+  res.end(JSON.stringify(body));
+}
+
+async function readBody(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  for await (const c of req) chunks.push(c as Buffer);
+  return JSON.parse(Buffer.concat(chunks).toString() || "{}");
+}
+
+const CreateSessionInput = z.object({
+  jobTitle: z.string().trim().min(2).max(80),
+  candidateName: z.string().trim().min(1).max(60),
+});
+
+async function createSession(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const parsed = CreateSessionInput.safeParse(await readBody(req));
+  if (!parsed.success) {
+    sendJson(res, 400, { error: parsed.error.issues[0]?.message ?? "invalid input" });
+    return;
+  }
+  const { jobTitle, candidateName } = parsed.data;
+  // player only types a position — synthesize a minimal JD for the rubric generator
+  const jdText = `Posisi yang dilamar: ${jobTitle}. Wawancara kompetensi umum untuk peran ${jobTitle} di sebuah perusahaan di Indonesia.`;
+  const rubric = await generateRubric(llmFromEnv(), { jobTitle, jdText });
+  // 3 kompetensi cukup untuk satu ronde game (~8 menit)
+  const competencies: CompetencySpec[] = rubric.slice(0, 3).map((c, i) => ({
+    id: `c${i + 1}`,
+    name: c.name,
+    description: c.description,
+    weight: c.weight,
+    order: i,
+    rubricLevels: c.rubricLevels,
+  }));
+  const id = randomUUID();
+  sessions.set(id, {
+    id,
+    status: "created",
+    report: null,
+    createdAt: Date.now(),
+    config: {
+      interviewId: id,
+      jobTitle,
+      jdText,
+      candidateName: candidateName.split(" ")[0] ?? candidateName,
+      competencies,
+      cvProfile: null,
+      targetDurationMin: 8,
+      maxProbesPerCompetency: 1,
+    },
+  });
+  sendJson(res, 200, { sessionId: id, jobTitle, competencies: competencies.map((c) => c.name) });
+}
+
+const server = createServer((req, res) => {
+  void (async () => {
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, CORS);
+      res.end();
+      return;
+    }
+    const url = new URL(req.url ?? "/", "http://localhost");
+    if (req.method === "POST" && url.pathname === "/session") return createSession(req, res);
+    const report = url.pathname.match(/^\/session\/([\w-]+)\/report$/);
+    if (req.method === "GET" && report) {
+      const s = sessions.get(report[1] ?? "");
+      if (!s) return sendJson(res, 404, { error: "unknown session" });
+      if (!s.report) return sendJson(res, 425, { error: "not scored yet", status: s.status });
+      return sendJson(res, 200, s.report);
+    }
+    if (url.pathname === "/health") return sendJson(res, 200, { ok: true, sessions: sessions.size });
+    sendJson(res, 404, { error: "not found" });
+  })().catch((err) => {
+    console.error(JSON.stringify({ evt: "http_error", err: String(err) }));
+    if (!res.headersSent) sendJson(res, 500, { error: "internal error" });
+  });
+});
+
+const wss = new WebSocketServer({ server, path: "/ws" });
+wss.on("connection", (ws, req) => {
+  void runInterview(ws, req).catch((err) => {
+    console.error(JSON.stringify({ evt: "session_error", err: String(err) }));
+    ws.close(1011, "internal error");
+  });
+});
+
+/**
+ * One live game interview over a WebSocket — the LiveKit-free counterpart of
+ * selia's agent session: same engine, same pipeline, WS frames as transport.
+ */
+async function runInterview(ws: WebSocket, req: IncomingMessage): Promise<void> {
+  const url = new URL(req.url ?? "", "http://localhost");
+  const found = sessions.get(url.searchParams.get("session") ?? "");
+  if (!found || found.status !== "created") {
+    ws.close(4404, "unknown or already used session");
+    return;
+  }
+  const session: GameSession = found;
+  session.status = "live";
+  console.log(JSON.stringify({ evt: "game_start", id: session.id, job: session.config.jobTitle }));
+
+  const send = (obj: unknown) => {
+    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(obj));
+  };
+  const tts = ttsFromEnv();
+  const sink: AudioSink = {
+    write(chunk) {
+      if (ws.readyState !== ws.OPEN) return;
+      ws.send(Buffer.from(chunk.pcm.buffer, chunk.pcm.byteOffset, chunk.pcm.byteLength));
+    },
+    clear() {
+      send({ type: "clear" });
+    },
+  };
+
+  const llm = llmFromEnv();
+  const engine = new InterviewEngine(session.config, llm);
+  const total = session.config.competencies.length;
+
+  let finished = false;
+  async function finalize(): Promise<void> {
+    if (finished) return;
+    finished = true;
+    session.status = "scoring";
+    send({ type: "scoring" });
+    await pipeline.stop().catch(() => {});
+    const { config } = session;
+    const turns = engine.state.turns;
+    let report: GameReport = {
+      jobTitle: config.jobTitle,
+      candidateName: config.candidateName,
+      overall: 0,
+      competencies: [],
+      summary: "Interview berakhir sebelum ada jawaban yang bisa dinilai.",
+      strengths: [],
+      growthAreas: [],
+      tips: "Coba lagi dan jawab setiap pertanyaan dengan contoh nyata.",
+    };
+    if (turns.some((t) => t.speaker === "CANDIDATE")) {
+      try {
+        const input = { jobTitle: config.jobTitle, competencies: config.competencies, turns };
+        const [scores, feedback] = await Promise.all([
+          scoreInterview(llm, input),
+          generateCandidateFeedback(llm, input),
+        ]);
+        const byId = new Map<string, string>(config.competencies.map((c) => [c.id, c.name]));
+        report = {
+          jobTitle: config.jobTitle,
+          candidateName: config.candidateName,
+          overall: overallScore(scores.competencyScores, config.competencies),
+          competencies: scores.competencyScores.map((s) => ({
+            name: byId.get(s.competencyId) ?? s.competencyId,
+            score: s.score,
+            justification: s.justification,
+          })),
+          summary: scores.summary,
+          strengths: feedback.strengths,
+          growthAreas: feedback.growthAreas,
+          tips: feedback.tips,
+        };
+      } catch (err) {
+        console.error(JSON.stringify({ evt: "scoring_error", err: String(err) }));
+      }
+    }
+    session.report = report;
+    session.status = "done";
+    send({ type: "report", report });
+    console.log(JSON.stringify({ evt: "game_done", id: session.id, turns: turns.length }));
+    setTimeout(() => ws.close(1000, "done"), 500);
+  }
+
+  // Engine calls serialized; .catch first so one failure can't poison the chain (selia pattern)
+  let engineQueue: Promise<unknown> = Promise.resolve();
+  const responder = (text: string, _signal: AbortSignal) => {
+    const run = engineQueue.catch(() => {}).then(() => engine.onCandidateAnswer(text));
+    engineQueue = run;
+    return (async function* () {
+      let reply: Awaited<ReturnType<typeof engine.onCandidateAnswer>>;
+      try {
+        reply = await run;
+      } catch (err) {
+        console.error(JSON.stringify({ evt: "engine_error", err: String(err) }));
+        yield "Maaf, tadi sistem sempat terkendala sebentar. Bisa tolong ulangi jawabanmu?";
+        return;
+      }
+      send({
+        type: "progress",
+        current: Math.min(engine.state.competencyIndex + 1, total),
+        total,
+        phase: engine.state.phase,
+      });
+      // let the closing line finish playing before scoring
+      if (reply.done) setTimeout(() => void finalize().catch(console.error), 9_000);
+      yield reply.utterance;
+    })();
+  };
+
+  const pipeline = new VoicePipeline({
+    stt: sttFromEnv(),
+    tts,
+    responder,
+    sink,
+    latency: new LatencyRecorder(),
+    events: {
+      onCaption: (speaker, text) => send({ type: "caption", speaker, text }),
+      onError: (err) => console.error(JSON.stringify({ evt: "pipeline_error", err: err.message })),
+    },
+  });
+  await pipeline.start();
+  send({ type: "ready", ttsSampleRate: tts.sampleRate, total, jobTitle: session.config.jobTitle });
+
+  ws.on("message", (data: Buffer, isBinary) => {
+    if (isBinary) {
+      if (data.byteLength < 2) return;
+      // copy — ws may reuse the underlying buffer across frames
+      const even = data.byteLength - (data.byteLength % 2);
+      const pcm = new Int16Array(data.buffer.slice(data.byteOffset, data.byteOffset + even));
+      pipeline.pushAudio({ pcm, sampleRate: CLIENT_SAMPLE_RATE });
+      return;
+    }
+    let msg: { type?: string };
+    try {
+      msg = JSON.parse(data.toString()) as { type?: string };
+    } catch {
+      return;
+    }
+    if (msg.type === "end") void finalize().catch(console.error);
+  });
+
+  ws.on("close", () => {
+    void pipeline.stop().catch(() => {});
+    // player left mid-interview: no resume in the game — session is spent
+    if (!finished) {
+      finished = true;
+      session.status = "done";
+      console.log(JSON.stringify({ evt: "game_abandoned", id: session.id }));
+    }
+  });
+
+  const greeting = engine.begin();
+  await pipeline.say(greeting.utterance);
+}
+
+server.listen(PORT, () => {
+  console.log(JSON.stringify({ evt: "listening", port: PORT }));
+});

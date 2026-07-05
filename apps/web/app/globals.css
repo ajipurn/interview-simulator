@@ -1,0 +1,275 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: #10141b;
+  color: #e8e6e1;
+}
+
+.game {
+  position: fixed;
+  inset: 0;
+}
+
+.game canvas {
+  display: block;
+}
+
+/* --- overlays --- */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.overlay.dim {
+  background: rgba(8, 10, 14, 0.62);
+  backdrop-filter: blur(4px);
+}
+
+.card {
+  background: #171c26;
+  border: 1px solid #2a3242;
+  border-radius: 16px;
+  padding: 28px;
+  width: min(440px, 100%);
+  max-height: 86vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.card h1 {
+  margin: 0 0 6px;
+  font-size: 26px;
+}
+
+.card h2 {
+  margin: 0 0 10px;
+  font-size: 21px;
+}
+
+.card h3 {
+  margin: 18px 0 6px;
+  font-size: 15px;
+  color: #9fb4d4;
+}
+
+.sub {
+  color: #9aa3b2;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 18px;
+}
+
+label {
+  display: block;
+  font-size: 13px;
+  color: #9fb4d4;
+  margin-bottom: 14px;
+}
+
+input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #2a3242;
+  background: #0e1218;
+  color: #e8e6e1;
+  font-size: 15px;
+}
+
+input:focus {
+  outline: 2px solid #4a86c9;
+  border-color: transparent;
+}
+
+button {
+  width: 100%;
+  padding: 12px;
+  border: 0;
+  border-radius: 10px;
+  background: #4a86c9;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #5b95d6;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.error {
+  color: #e07a6a;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+/* --- in-game HUD --- */
+
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.hint {
+  margin: 18px auto 0;
+  padding: 8px 16px;
+  background: rgba(14, 18, 24, 0.7);
+  border-radius: 999px;
+  font-size: 13px;
+  color: #b9c2d0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 14px 16px 0;
+  padding: 10px 14px;
+  background: rgba(14, 18, 24, 0.72);
+  border: 1px solid #2a3242;
+  border-radius: 12px;
+  font-size: 13px;
+  pointer-events: auto;
+  width: fit-content;
+}
+
+.live {
+  color: #6ad08a;
+}
+
+.end {
+  width: auto;
+  padding: 7px 12px;
+  font-size: 12px;
+  background: #6a3434;
+}
+
+.end:hover {
+  background: #7d4040;
+}
+
+.captions {
+  margin: 0 auto 26px;
+  width: min(680px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.captions p {
+  margin: 0;
+  padding: 9px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.45;
+  background: rgba(14, 18, 24, 0.78);
+  border: 1px solid #232b3a;
+}
+
+.captions p.ai b {
+  color: #7fb0e8;
+}
+
+.captions p.candidate b {
+  color: #8fd6a4;
+}
+
+.error.floating {
+  position: absolute;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(30, 14, 12, 0.9);
+  padding: 10px 16px;
+  border-radius: 10px;
+  pointer-events: auto;
+}
+
+/* --- report --- */
+
+.overall {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.overall .score {
+  font-size: 44px;
+  font-weight: 700;
+  color: #7fb0e8;
+}
+
+.overall .of {
+  color: #9aa3b2;
+}
+
+.comp {
+  margin-bottom: 14px;
+}
+
+.comp-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  margin-bottom: 5px;
+}
+
+.bar {
+  height: 7px;
+  border-radius: 4px;
+  background: #0e1218;
+  overflow: hidden;
+}
+
+.bar .fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #4a86c9, #6ad08a);
+}
+
+.just {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: #9aa3b2;
+  line-height: 1.45;
+}
+
+ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #c6cdd8;
+}
+
+.tips {
+  margin: 16px 0;
+  padding: 12px;
+  background: #1c2433;
+  border-radius: 10px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
