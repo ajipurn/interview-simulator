@@ -98,30 +98,38 @@ function useClips(
 
 // --- office props --------------------------------------------------------
 
+const STUB_H = 0.35;
+
+/** `stub` = dollhouse cut: camera-side walls shrink to a low ledge so the interior stays visible. */
 function Wall({
   position,
   size,
   color = "#e8e4da",
+  stub = false,
 }: {
   position: [number, number, number];
   size: [number, number, number];
   color?: string;
+  stub?: boolean;
 }) {
+  const [w, h, d] = size;
   return (
-    <mesh position={position} receiveShadow castShadow>
-      <boxGeometry args={size} />
+    <mesh position={[position[0], stub ? STUB_H / 2 : position[1], position[2]]} receiveShadow castShadow>
+      <boxGeometry args={[w, stub ? STUB_H : h, d]} />
       <meshStandardMaterial color={color} />
     </mesh>
   );
 }
 
-function CeilingLamp({ x, z }: { x: number; z: number }) {
+function CeilingLamp({ x, z, showFixture }: { x: number; z: number; showFixture: boolean }) {
   return (
     <group position={[x, 2.95, z]}>
-      <mesh>
-        <boxGeometry args={[1.1, 0.06, 0.4]} />
-        <meshStandardMaterial color="#ffffff" emissive="#fff7e0" emissiveIntensity={1.6} />
-      </mesh>
+      {showFixture && (
+        <mesh>
+          <boxGeometry args={[1.1, 0.06, 0.4]} />
+          <meshStandardMaterial color="#ffffff" emissive="#fff7e0" emissiveIntensity={1.6} />
+        </mesh>
+      )}
       <pointLight intensity={6} distance={7} decay={2} color="#fff2d0" />
     </group>
   );
@@ -178,7 +186,8 @@ function Chair({
   );
 }
 
-function Office() {
+/** `dollhouse` = helicopter view: no ceiling/lamp fixtures so the camera sees inside. */
+function Office({ dollhouse }: { dollhouse: boolean }) {
   return (
     <group>
       {/* floor: corridor wood + room carpet */}
@@ -190,27 +199,29 @@ function Office() {
         <planeGeometry args={[7.8, 5.8]} />
         <meshStandardMaterial color="#31465f" />
       </mesh>
-      {/* ceiling */}
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 3, 1]}>
-        <planeGeometry args={[16, 18]} />
-        <meshStandardMaterial color="#f4f1ea" />
-      </mesh>
+      {/* ceiling — hidden in helicopter view */}
+      {!dollhouse && (
+        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 3, 1]}>
+          <planeGeometry args={[16, 18]} />
+          <meshStandardMaterial color="#f4f1ea" />
+        </mesh>
+      )}
 
-      {/* corridor walls (entrance z=9 → room z=0) */}
+      {/* corridor walls (entrance z=9 → room z=0); east wall faces the helicopter camera */}
       <Wall position={[-1.6, 1.5, 5]} size={[0.15, 3, 8]} />
-      <Wall position={[1.6, 1.5, 5]} size={[0.15, 3, 8]} />
+      <Wall position={[1.6, 1.5, 5]} size={[0.15, 3, 8]} stub={dollhouse} />
       <Painting x={-1.5} z={6.5} rotY={Math.PI / 2} color="#c96f4a" />
-      <Painting x={1.5} z={4.5} rotY={-Math.PI / 2} color="#4a86c9" />
+      {!dollhouse && <Painting x={1.5} z={4.5} rotY={-Math.PI / 2} color="#4a86c9" />}
       <Plant position={[1.2, 0, 1.6]} />
 
-      {/* interview room shell */}
+      {/* interview room shell; east + front walls face the helicopter camera */}
       <Wall position={[0, 1.5, -6.15]} size={[8, 3, 0.15]} />
       <Wall position={[-4, 1.5, -3]} size={[0.15, 3, 6.3]} />
-      <Wall position={[4, 1.5, -3]} size={[0.15, 3, 6.3]} />
+      <Wall position={[4, 1.5, -3]} size={[0.15, 3, 6.3]} stub={dollhouse} />
       {/* front wall with a door gap */}
-      <Wall position={[-2.6, 1.5, 0]} size={[2.9, 3, 0.15]} />
-      <Wall position={[2.6, 1.5, 0]} size={[2.9, 3, 0.15]} />
-      <Wall position={[0, 2.75, 0]} size={[2.3, 0.5, 0.15]} />
+      <Wall position={[-2.6, 1.5, 0]} size={[2.9, 3, 0.15]} stub={dollhouse} />
+      <Wall position={[2.6, 1.5, 0]} size={[2.9, 3, 0.15]} stub={dollhouse} />
+      {!dollhouse && <Wall position={[0, 2.75, 0]} size={[2.3, 0.5, 0.15]} />}
 
       {/* decor on the wall the player stares at all game */}
       <Painting x={-1.6} z={-6.05} rotY={0} color="#c9a84a" />
@@ -250,9 +261,9 @@ function Office() {
       <Plant position={[-3.4, 0, -5.6]} />
       <Plant position={[3.4, 0, -5.6]} />
 
-      <CeilingLamp x={0} z={-3.5} />
-      <CeilingLamp x={0} z={2} />
-      <CeilingLamp x={0} z={6} />
+      <CeilingLamp x={0} z={-3.5} showFixture={!dollhouse} />
+      <CeilingLamp x={0} z={2} showFixture={!dollhouse} />
+      <CeilingLamp x={0} z={6} showFixture={!dollhouse} />
     </group>
   );
 }
@@ -353,10 +364,14 @@ function Player({
       p.set(SIT_POS.x, 0, SIT_POS.z);
       facing.current = Math.PI; // face the interviewer
     } else if (controllable) {
-      const dx = (keys.current.right ? 1 : 0) - (keys.current.left ? 1 : 0);
-      const dz = (keys.current.down ? 1 : 0) - (keys.current.up ? 1 : 0);
-      if (dx !== 0 || dz !== 0) {
+      const ix = (keys.current.right ? 1 : 0) - (keys.current.left ? 1 : 0);
+      const iz = (keys.current.down ? 1 : 0) - (keys.current.up ? 1 : 0);
+      if (ix !== 0 || iz !== 0) {
         moving = true;
+        // input is screen-relative: rotate by the helicopter camera's 45° azimuth
+        // so W walks "up the screen", not up the world axis
+        const dx = (ix + iz) * Math.SQRT1_2;
+        const dz = (iz - ix) * Math.SQRT1_2;
         const len = Math.hypot(dx, dz);
         const stepX = (dx / len) * SPEED * dt;
         const stepZ = (dz / len) * SPEED * dt;
@@ -391,13 +406,14 @@ function Player({
       g.rotation.y = facing.current;
     }
 
-    // camera: follow from behind (+z), or over-the-shoulder when seated
+    // camera: helicopter (isometric-ish, from the south-east) while roaming,
+    // over-the-shoulder once seated
     if (seated) {
       camGoal.set(1.45, 2.0, -1.0);
       lookGoal.set(-0.15, 1.2, -4.75);
     } else {
-      camGoal.set(p.x, 2.4, p.z + 3.8);
-      lookGoal.set(p.x, 1.0, p.z);
+      camGoal.set(p.x + 4.6, 7.6, p.z + 4.6);
+      lookGoal.set(p.x, 0.6, p.z);
     }
     const k = 1 - Math.exp(-6 * dt);
     camera.position.lerp(camGoal, k);
@@ -421,10 +437,11 @@ export function Scene({
   onNearChair: (near: boolean) => void;
   aiLevel: { current: number };
 }) {
+  const seated = phase === "interview" || phase === "scoring" || phase === "report";
   return (
     <>
       <color attach="background" args={["#10141b"]} />
-      <fog attach="fog" args={["#10141b", 10, 26]} />
+      <fog attach="fog" args={["#10141b", 14, 36]} />
       <ambientLight intensity={0.55} />
       <directionalLight
         position={[-6, 5, -2]}
@@ -433,13 +450,9 @@ export function Scene({
         castShadow
         shadow-mapSize={[1024, 1024]}
       />
-      <Office />
+      <Office dollhouse={!seated} />
       <Interviewer aiLevel={aiLevel} />
-      <Player
-        seated={phase === "interview" || phase === "scoring" || phase === "report"}
-        controllable={phase === "explore"}
-        onNearChair={onNearChair}
-      />
+      <Player seated={seated} controllable={phase === "explore"} onNearChair={onNearChair} />
     </>
   );
 }
