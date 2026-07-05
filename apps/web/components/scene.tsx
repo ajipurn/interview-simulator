@@ -337,7 +337,11 @@ function Player({
   const camera = useThree((s) => s.camera);
 
   useEffect(() => {
+    const typing = (e: KeyboardEvent) =>
+      e.target instanceof HTMLElement &&
+      (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable);
     const down = (e: KeyboardEvent) => {
+      if (typing(e)) return; // let WASD type into the lobby form
       const k = KEYMAP[e.code];
       if (!k) return;
       e.preventDefault();
