@@ -39,4 +39,9 @@ WASD / panah = jalan (third person) · E dekat kursi = duduk & mulai interview �
 
 ## Asset 3D
 
-Karakter: [Kenney — Blocky Characters](https://kenney.nl/assets/blocky-characters) (CC0, `apps/web/public/models/blocky/` + License.txt). Ganti karakter = ganti huruf file `character-a..r.glb` (+ tekstur pasangannya di `Textures/`). Lingkungan masih primitif R3F; upgrade furniture: GLB CC0 [Kenney](https://kenney.nl) / [Poly Pizza](https://poly.pizza).
+Semua CC0 dari Kenney (License.txt ikut di tiap folder):
+
+- Karakter: [Mini Characters](https://kenney.nl/assets/mini-characters) — `apps/web/public/models/mini/`. Player `character-male-a`, interviewer `character-female-a`; ganti = ganti nama file (`character-{male,female}-a..f.glb`, tekstur `Textures/colormap.png` dipakai bersama).
+- Furnitur: [Furniture Kit](https://kenney.nl/assets/furniture-kit) — `apps/web/public/models/furniture/`. Origin kit di sudut, komponen `Furn` me-recenter otomatis; skala global `FURN_SCALE` (kit ~setengah meter-scale).
+
+Dinding/lantai tetap primitif R3F — mereka yang mendefinisikan peta collision (`REGIONS`/`BLOCKERS` di scene.tsx).

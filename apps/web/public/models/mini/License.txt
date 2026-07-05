@@ -1,9 +1,9 @@
 	
 
-	Blocky Characters (2.0)
+	Mini Characters (1.0)
 
 	Created/distributed by Kenney (www.kenney.nl)
-	Creation date: 10-06-2025 11:19
+	Creation date: 17-07-2024 11:31
 	
 			------------------------------
 
@@ -23,6 +23,6 @@
 	
 	Follow on social media for updates:
 
-	• Twitter:	 twitter.com/KenneyNL
-	• BlueSky:	 kenney.bsky.social
+	• Twitter:   twitter.com/KenneyNL
 	• Instagram: instagram.com/kenney_nl
+	• Mastodon:  mastodon.gamedev.place/@kenney

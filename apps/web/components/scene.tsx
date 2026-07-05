@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * The whole 3D world: office from flat-colored primitives, characters from
- * Kenney's CC0 "Blocky Characters" pack (public/models/blocky). Third-person
- * player (WASD/arrows, E to sit) with baked idle/walk/sit clips; interviewer
- * sits behind the desk and nods along with the AI's live audio level.
+ * The whole 3D world. Architecture (walls/floors) stays primitive — it defines
+ * the collision map; everything else is Kenney CC0: characters from "Mini
+ * Characters" (public/models/mini, baked idle/walk/sit clips), furniture from
+ * "Furniture Kit" (public/models/furniture). Third-person player (WASD/arrows,
+ * E to sit); the interviewer nods along with the AI's live audio level.
  */
 import { useFrame, useLoader, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
@@ -19,9 +20,24 @@ export const SIT_POS = new THREE.Vector3(0, 0, -2.9);
 const SIT_NEAR = 1.15;
 const SPEED = 3.1;
 const PLAYER_RADIUS = 0.3;
-const CHAR_HEIGHT = 1.72;
+/** Chibi height — mini characters normalized to this. */
+const CHAR_HEIGHT = 1.5;
 /** Height of the chair seat — where a sitting character's origin lands. */
-const SEAT_Y = 0.45;
+const SEAT_Y = 0.4;
+/** Furniture Kit is authored at roughly half scale (desk 0.38 raw) — scale to meters. */
+const FURN_SCALE = 1.95;
+const DESK_TOP = 0.74;
+
+const F = {
+  desk: "/models/furniture/desk.glb",
+  chair: "/models/furniture/chairDesk.glb",
+  bookcase: "/models/furniture/bookcaseClosedWide.glb",
+  plant: "/models/furniture/pottedPlant.glb",
+  sofa: "/models/furniture/loungeSofa.glb",
+  laptop: "/models/furniture/laptop.glb",
+  books: "/models/furniture/books.glb",
+  rug: "/models/furniture/rugRectangle.glb",
+};
 
 // --- walkable space -----------------------------------------------------
 // Two rects joined by the door gap; furniture blocks. Cheap and enough —
@@ -39,7 +55,9 @@ const BLOCKERS: { x1: number; x2: number; z1: number; z2: number }[] = [
   { x1: -0.35, x2: 0.35, z1: -3.25, z2: -2.55 }, // player chair
   { x1: -3.85, x2: -2.95, z1: -6.05, z2: -5.15 }, // room plants
   { x1: 2.95, x2: 3.85, z1: -6.05, z2: -5.15 },
+  { x1: -3.5, x2: -1.9, z1: -6.1, z2: -5.6 }, // bookcase
   { x1: 0.75, x2: 1.65, z1: 1.15, z2: 2.05 }, // corridor plant
+  { x1: -1.5, x2: -0.6, z1: 4.5, z2: 6.5 }, // corridor sofa
 ];
 
 function canWalk(x: number, z: number): boolean {
@@ -96,6 +114,40 @@ function useClips(
   return { mixer, play };
 }
 
+/**
+ * One Furniture Kit piece. Kit origins sit at a corner, not the center —
+ * recenter x/z on load so `position` means "center of the piece on the floor".
+ * Clones the cached scene, so the same URL can be placed many times.
+ */
+function Furn({
+  url,
+  position,
+  rotY = 0,
+  scale = FURN_SCALE,
+}: {
+  url: string;
+  position: [number, number, number];
+  rotY?: number;
+  scale?: number;
+}) {
+  const gltf = useLoader(GLTFLoader, url);
+  const obj = useMemo(() => {
+    const c = gltf.scene.clone(true);
+    c.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+      }
+    });
+    const box = new THREE.Box3().setFromObject(c);
+    c.position.set(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2);
+    const wrap = new THREE.Group();
+    wrap.add(c);
+    return wrap;
+  }, [gltf]);
+  return <primitive object={obj} position={position} rotation={[0, rotY, 0]} scale={scale} />;
+}
+
 // --- office props --------------------------------------------------------
 
 const STUB_H = 0.35;
@@ -135,54 +187,12 @@ function CeilingLamp({ x, z, showFixture }: { x: number; z: number; showFixture:
   );
 }
 
-function Plant({ position }: { position: [number, number, number] }) {
-  return (
-    <group position={position}>
-      <mesh position={[0, 0.18, 0]} castShadow>
-        <cylinderGeometry args={[0.16, 0.13, 0.36, 12]} />
-        <meshStandardMaterial color="#8a5a3b" />
-      </mesh>
-      <mesh position={[0, 0.62, 0]} castShadow>
-        <coneGeometry args={[0.3, 0.75, 8]} />
-        <meshStandardMaterial color="#3e7c4f" />
-      </mesh>
-    </group>
-  );
-}
-
 function Painting({ x, z, rotY, color }: { x: number; z: number; rotY: number; color: string }) {
   return (
     <mesh position={[x, 1.7, z]} rotation={[0, rotY, 0]}>
       <planeGeometry args={[0.9, 0.6]} />
       <meshStandardMaterial color={color} />
     </mesh>
-  );
-}
-
-function Chair({
-  position,
-  rotY = 0,
-  color = "#4a4f57",
-}: {
-  position: [number, number, number];
-  rotY?: number;
-  color?: string;
-}) {
-  return (
-    <group position={position} rotation={[0, rotY, 0]}>
-      <mesh position={[0, 0.45, 0]} castShadow>
-        <boxGeometry args={[0.5, 0.07, 0.5]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-      <mesh position={[0, 0.75, -0.22]} castShadow>
-        <boxGeometry args={[0.5, 0.6, 0.07]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-      <mesh position={[0, 0.2, 0]}>
-        <cylinderGeometry args={[0.04, 0.04, 0.4, 8]} />
-        <meshStandardMaterial color="#2c2f33" />
-      </mesh>
-    </group>
   );
 }
 
@@ -212,7 +222,9 @@ function Office({ dollhouse }: { dollhouse: boolean }) {
       <Wall position={[1.6, 1.5, 5]} size={[0.15, 3, 8]} stub={dollhouse} />
       <Painting x={-1.5} z={6.5} rotY={Math.PI / 2} color="#c96f4a" />
       {!dollhouse && <Painting x={1.5} z={4.5} rotY={-Math.PI / 2} color="#4a86c9" />}
-      <Plant position={[1.2, 0, 1.6]} />
+      <Furn url={F.plant} position={[1.2, 0, 1.6]} />
+      <Furn url={F.sofa} position={[-1.05, 0, 5.5]} rotY={Math.PI / 2} />
+      <Furn url={F.rug} position={[0, 0.005, 7.6]} scale={FURN_SCALE * 0.8} />
 
       {/* interview room shell; east + front walls face the helicopter camera */}
       <Wall position={[0, 1.5, -6.15]} size={[8, 3, 0.15]} />
@@ -233,33 +245,16 @@ function Office({ dollhouse }: { dollhouse: boolean }) {
         <meshStandardMaterial color="#bcd6ef" emissive="#9fc4e8" emissiveIntensity={0.9} />
       </mesh>
 
-      {/* desk + monitor + chairs */}
-      <group position={[0, 0, -4]}>
-        <mesh position={[0, 0.74, 0]} castShadow receiveShadow>
-          <boxGeometry args={[2.1, 0.08, 0.95]} />
-          <meshStandardMaterial color="#6b4f35" />
-        </mesh>
-        {[-0.95, 0.95].map((x) =>
-          [-0.38, 0.38].map((z) => (
-            <mesh key={`${x}${z}`} position={[x, 0.37, z]}>
-              <boxGeometry args={[0.07, 0.74, 0.07]} />
-              <meshStandardMaterial color="#584127" />
-            </mesh>
-          )),
-        )}
-        <mesh position={[0.55, 0.95, -0.15]} rotation={[0, -0.5, 0]} castShadow>
-          <boxGeometry args={[0.5, 0.32, 0.03]} />
-          <meshStandardMaterial color="#1c1e22" emissive="#2d3d55" emissiveIntensity={0.7} />
-        </mesh>
-        <mesh position={[-0.4, 0.83, 0.1]} castShadow>
-          <boxGeometry args={[0.28, 0.03, 0.2]} />
-          <meshStandardMaterial color="#d9d4c8" />
-        </mesh>
-      </group>
-      <Chair position={[0, 0, -4.9]} color="#3a3f46" />
-      <Chair position={[0, 0, -2.9]} rotY={Math.PI} color="#5b4632" />
-      <Plant position={[-3.4, 0, -5.6]} />
-      <Plant position={[3.4, 0, -5.6]} />
+      {/* furniture — Kenney Furniture Kit */}
+      <Furn url={F.rug} position={[0, 0.006, -3.7]} />
+      <Furn url={F.desk} position={[0, 0, -4]} />
+      <Furn url={F.chair} position={[0, 0, -4.9]} />
+      <Furn url={F.chair} position={[0, 0, -2.9]} rotY={Math.PI} />
+      <Furn url={F.laptop} position={[0.35, DESK_TOP, -4]} rotY={Math.PI} scale={FURN_SCALE * 0.55} />
+      <Furn url={F.books} position={[-0.5, DESK_TOP, -4.05]} rotY={0.4} />
+      <Furn url={F.bookcase} position={[-2.7, 0, -5.88]} />
+      <Furn url={F.plant} position={[-3.4, 0, -5.6]} />
+      <Furn url={F.plant} position={[3.4, 0, -5.6]} />
 
       <CeilingLamp x={0} z={-3.5} showFixture={!dollhouse} />
       <CeilingLamp x={0} z={2} showFixture={!dollhouse} />
@@ -273,7 +268,7 @@ function Office({ dollhouse }: { dollhouse: boolean }) {
 const INTERVIEWER_CLIPS = ["sit"] as const;
 
 function Interviewer({ aiLevel }: { aiLevel: { current: number } }) {
-  const { scene, animations, scale } = useBlockyCharacter("/models/blocky/character-b.glb");
+  const { scene, animations, scale } = useBlockyCharacter("/models/mini/character-female-a.glb");
   const { mixer, play } = useClips(scene, animations, INTERVIEWER_CLIPS);
   const head = useMemo(() => scene.getObjectByName("head"), [scene]);
 
@@ -324,7 +319,7 @@ function Player({
   controllable: boolean;
   onNearChair: (near: boolean) => void;
 }) {
-  const { scene, animations, scale } = useBlockyCharacter("/models/blocky/character-a.glb");
+  const { scene, animations, scale } = useBlockyCharacter("/models/mini/character-male-a.glb");
   const { mixer, play } = useClips(scene, animations, PLAYER_CLIPS);
   const group = useRef<THREE.Group>(null);
   const pos = useRef(SPAWN.clone());
@@ -413,8 +408,9 @@ function Player({
     // camera: helicopter (isometric-ish, from the south-east) while roaming,
     // over-the-shoulder once seated
     if (seated) {
-      camGoal.set(1.45, 2.0, -1.0);
-      lookGoal.set(-0.15, 1.2, -4.75);
+      // chibi heads sit lower — framing tuned for the mini characters
+      camGoal.set(1.35, 1.7, -1.05);
+      lookGoal.set(-0.12, 0.9, -4.8);
     } else {
       camGoal.set(p.x + 4.6, 7.6, p.z + 4.6);
       lookGoal.set(p.x, 0.6, p.z);
