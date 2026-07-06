@@ -5,6 +5,7 @@ import {
   candidateQuestionPrompt,
   coreQuestionPrompt,
   fallbackCoreQuestion,
+  PERSONA,
   starAnalysisPrompt,
 } from "./prompts/v1.js";
 import { type CompetencySpec, type EngineConfig, type EngineEvent, StarAnalysis } from "./types.js";
@@ -77,10 +78,15 @@ export class Planner {
     });
     try {
       const q = (
-        await this.llm.complete([{ role: "user", content: prompt }], {
-          temperature: 0.4,
-          maxTokens: 300,
-        })
+        await this.llm.complete(
+          // PERSONA pins the register ("kamu", never "Anda") — without it the
+          // model drifts formal on player-facing text
+          [
+            { role: "system", content: PERSONA },
+            { role: "user", content: prompt },
+          ],
+          { temperature: 0.4, maxTokens: 300 },
+        )
       ).trim();
       if (!q) throw new Error("empty core question");
       return q;
@@ -131,10 +137,13 @@ export class Planner {
     });
     try {
       const a = (
-        await this.llm.complete([{ role: "user", content: prompt }], {
-          temperature: 0.4,
-          maxTokens: 200,
-        })
+        await this.llm.complete(
+          [
+            { role: "system", content: PERSONA },
+            { role: "user", content: prompt },
+          ],
+          { temperature: 0.4, maxTokens: 200 },
+        )
       ).trim();
       if (!a) throw new Error("empty answer");
       return a;

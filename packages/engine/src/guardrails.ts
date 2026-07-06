@@ -65,17 +65,27 @@ export type GuardrailResult =
   | { ok: false; text: string; topic: string; original: string };
 
 /**
+ * Selia's register is "kamu"; LLM output drifts formal now and then despite
+ * the persona prompt. Deterministic floor, same philosophy as the blocklist.
+ * "kamu" is a grammatical drop-in wherever "Anda" appears.
+ */
+export function normalizeRegister(text: string): string {
+  return text.replace(/\b[Aa]nda\b/g, "kamu");
+}
+
+/**
  * Check an AI utterance. If it trips a rule, return `ok: false` with a safe
  * replacement (`text` = the caller-provided fallback) so the interview keeps
  * flowing; the caller must log the event to the audit trail.
  */
 export function checkUtterance(utterance: string, safeFallback: string): GuardrailResult {
+  const normalized = normalizeRegister(utterance);
   for (const rule of [...PROHIBITED, ...PROMISES]) {
-    if (rule.pattern.test(utterance)) {
+    if (rule.pattern.test(normalized)) {
       return { ok: false, text: safeFallback, topic: rule.topic, original: utterance };
     }
   }
-  return { ok: true, text: utterance };
+  return { ok: true, text: normalized };
 }
 
 /**
