@@ -191,17 +191,29 @@ button:disabled {
   width: min(700px, calc(100% - 32px));
   display: flex;
   flex-direction: column;
+  /* subtitle strip, not a chat log: clamp the stack so long turns can't
+     climb up over the interviewer; flex-end + hidden clips the OLD bubble
+     at the top, newest always fully visible at the bottom */
+  justify-content: flex-end;
+  max-height: 30vh;
+  overflow: hidden;
+  /* the mask always eats the container's top 24px — keep that band empty
+     padding so an unclipped bubble renders whole; only overflow content
+     climbs into the fade zone */
+  padding-top: 24px;
+  mask-image: linear-gradient(to bottom, transparent 0, #000 24px);
   gap: 6px;
 }
 
 .captions p {
   margin: 0;
-  padding: 9px 14px;
+  padding: 8px 14px;
   border-radius: 12px;
-  font-size: 19px;
+  font-size: 17px;
   line-height: 1.25;
   background: rgba(14, 18, 24, 0.78);
   border: 1px solid #232b3a;
+  flex-shrink: 0;
 }
 
 .captions p.ai b {

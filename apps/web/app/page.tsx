@@ -412,7 +412,8 @@ export default function Game() {
       return;
     }
     if (msg.type === "caption") {
-      setCaptions((prev) => [...prev.slice(-3), { speaker: msg.speaker, text: msg.text }]);
+      // last exchange only — a 4-bubble backlog stacked high enough to bury Selia
+      setCaptions((prev) => [...prev.slice(-1), { speaker: msg.speaker, text: msg.text }]);
       // candidate final = Selia composing; any AI caption = she's answering
       markThinking(msg.speaker === "candidate");
     } else if (msg.type === "progress") setProgress({ current: msg.current, total: msg.total });
