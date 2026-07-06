@@ -531,33 +531,60 @@ function Interviewer({
   const { scene, animations, scale } = useBlockyCharacter("/models/mini/character-female-d.glb");
   const { mixer, play } = useClips(scene, animations, INTERVIEWER_CLIPS);
   const head = useMemo(() => scene.getObjectByName("head"), [scene]);
-  // 0..1 blend so the think-tilt eases in/out instead of snapping
+  // 0..1 blend so the think cues ease in/out instead of snapping
   const think = useRef(0);
+  const dots = useRef<THREE.Group>(null);
+  const headWorld = useMemo(() => new THREE.Vector3(), []);
 
   useEffect(() => play("sit"), [play]);
 
   useFrame(({ clock }, dt) => {
     mixer.update(dt);
-    // talk cue: nod + tilt scaled by live TTS level. SET, never accumulate —
-    // this clip doesn't animate the head node, so `+=` would integrate every
-    // frame until the head keels over onto the desk.
     const level = aiLevel.current;
     const t = clock.elapsedTime;
+    think.current += ((thinking.current ? 1 : 0) - think.current) * Math.min(1, dt * 4);
     if (head) {
+      // talk cue: nod + tilt scaled by live TTS level. SET, never accumulate —
+      // this clip doesn't animate the head node, so `+=` would integrate every
+      // frame until the head keels over onto the desk.
       head.rotation.x = Math.sin(t * 13) * 0.12 * level;
       head.rotation.z = Math.sin(t * 7) * 0.05 * level;
       // think cue: slow "hmm" head-tilt while she composes a reply. Additive
       // on top of the SET above, so it still resets to absolute every frame.
-      think.current += ((thinking.current ? 1 : 0) - think.current) * Math.min(1, dt * 4);
       head.rotation.z += think.current * (0.16 + Math.sin(t * 1.6) * 0.05);
       head.rotation.x += think.current * 0.05;
+    }
+    // thought-bubble dots over her head: pop in with the blend, bob in a wave
+    const g = dots.current;
+    if (g) {
+      if (head) {
+        head.getWorldPosition(headWorld);
+        g.position.set(headWorld.x, headWorld.y + 0.5, headWorld.z);
+      }
+      g.visible = think.current > 0.02;
+      g.scale.setScalar(think.current);
+      g.children.forEach((dot, i) => {
+        dot.position.y = Math.sin(t * 5 - i * 0.9) * 0.045;
+      });
     }
   });
 
   return (
-    <group position={[0, SEAT_Y, -5.9]} rotation={[0, 0, 0]}>
-      <primitive object={scene} scale={scale} />
-    </group>
+    <>
+      <group position={[0, SEAT_Y, -5.9]} rotation={[0, 0, 0]}>
+        <primitive object={scene} scale={scale} />
+      </group>
+      {/* sibling of the seated group (not a child): positioned in world space
+          from the head bone each frame, so the tilt animation can't drag it */}
+      <group ref={dots} visible={false}>
+        {[-0.13, 0, 0.13].map((x) => (
+          <mesh key={x} position={[x, 0, 0]}>
+            <sphereGeometry args={[0.045, 12, 12]} />
+            <meshStandardMaterial color="#7fb0e8" emissive="#7fb0e8" emissiveIntensity={0.7} />
+          </mesh>
+        ))}
+      </group>
+    </>
   );
 }
 

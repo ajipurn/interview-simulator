@@ -12,7 +12,7 @@ import {
   scoreInterview,
 } from "@selia/engine";
 import { z } from "@selia/shared";
-import { type AudioChunk, llmFromEnv, sttFromEnv, type TtsProvider, ttsFromEnv } from "@selia/voice-core";
+import { llmFromEnv, sttFromEnv, ttsFromEnv } from "@selia/voice-core";
 import { type WebSocket, WebSocketServer } from "ws";
 import { LatencyRecorder } from "./latency.js";
 import { type AudioSink, VoicePipeline } from "./pipeline.js";
@@ -110,6 +110,12 @@ function clientIp(req: IncomingMessage): string {
   return first || req.socket.remoteAddress || "unknown";
 }
 
+// Local dev burns the lifetime cap in two test runs. Loopback is never real
+// traffic — in prod every request arrives via the proxy with x-forwarded-for.
+function isLoopback(ip: string): boolean {
+  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+}
+
 const ATTEMPTS_EXHAUSTED =
   "Jatah interview-mu sudah habis (maksimal 2 sesi per orang). Makasih sudah main!";
 
@@ -136,14 +142,17 @@ const CreateSessionInput = z.object({
 });
 
 async function createSession(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const lim = limitFor(clientIp(req));
-  if (lim.starts >= MAX_ATTEMPTS) {
-    sendJson(res, 429, { error: ATTEMPTS_EXHAUSTED });
-    return;
-  }
-  if (lim.createdToday >= MAX_SESSIONS_PER_DAY) {
-    sendJson(res, 429, { error: "Terlalu banyak percobaan hari ini — coba lagi besok ya." });
-    return;
+  const ip = clientIp(req);
+  const lim = limitFor(ip);
+  if (!isLoopback(ip)) {
+    if (lim.starts >= MAX_ATTEMPTS) {
+      sendJson(res, 429, { error: ATTEMPTS_EXHAUSTED });
+      return;
+    }
+    if (lim.createdToday >= MAX_SESSIONS_PER_DAY) {
+      sendJson(res, 429, { error: "Terlalu banyak percobaan hari ini — coba lagi besok ya." });
+      return;
+    }
   }
   const parsed = CreateSessionInput.safeParse(await readBody(req));
   if (!parsed.success) {
@@ -228,28 +237,6 @@ wss.on("connection", (ws, req) => {
 });
 
 /**
- * Short acknowledgements the pipeline plays the instant a final transcript
- * arrives, masking LLM + TTS latency (2-5s of dead air otherwise). Synthesized
- * once per session, in the background — the greeting isn't delayed, and the
- * first candidate answer lands well after these resolve.
- */
-// neutral, non-semantic only — "Oke, menarik." after a flat answer read as a
-// non-sequitur; anything with content risks not matching what was just said
-const FILLER_LINES = ["Oke.", "Hmm."];
-
-function synthFillersInto(tts: TtsProvider, out: AudioChunk[][]): void {
-  for (const line of FILLER_LINES) {
-    void (async () => {
-      const chunks: AudioChunk[] = [];
-      for await (const c of tts.synthesize(line)) chunks.push(c);
-      if (chunks.length > 0) out.push(chunks);
-    })().catch((err) =>
-      console.error(JSON.stringify({ evt: "filler_synth_failed", line, err: String(err) })),
-    );
-  }
-}
-
-/**
  * One live game interview over a WebSocket — the LiveKit-free counterpart of
  * selia's agent session: same engine, same pipeline, WS frames as transport.
  */
@@ -267,8 +254,9 @@ async function runInterview(ws: WebSocket, req: IncomingMessage): Promise<void> 
   };
 
   // attempt is spent when the interview actually starts (mic on = billing on)
-  const lim = limitFor(clientIp(req));
-  if (lim.starts >= MAX_ATTEMPTS) {
+  const ip = clientIp(req);
+  const lim = limitFor(ip);
+  if (!isLoopback(ip) && lim.starts >= MAX_ATTEMPTS) {
     send({ type: "denied", reason: ATTEMPTS_EXHAUSTED });
     ws.close(4429, "attempts exhausted");
     return;
@@ -393,17 +381,15 @@ async function runInterview(ws: WebSocket, req: IncomingMessage): Promise<void> 
     })();
   };
 
-  // mutable array shared with the pipeline — fills in the background
-  const fillers: AudioChunk[][] = [];
-  synthFillersInto(tts, fillers);
-
+  // audio fillers taken down for now — the client's visual thinking cue masks
+  // planner latency without risking a non-sequitur "Hmm." (pipeline still
+  // supports `fillers` if they ever come back)
   const pipeline = new VoicePipeline({
     stt: sttFromEnv(CLIENT_SAMPLE_RATE),
     tts,
     responder,
     sink,
     latency: new LatencyRecorder(),
-    fillers,
     events: {
       onCaption: (speaker, text) => send({ type: "caption", speaker, text }),
       onError: (err) => console.error(JSON.stringify({ evt: "pipeline_error", err: err.message })),
