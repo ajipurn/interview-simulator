@@ -2,7 +2,7 @@
 
 import { Canvas } from "@react-three/fiber";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { type GamePhase, Scene } from "../components/scene";
+import { type GamePhase, Scene, type StickState } from "../components/scene";
 import { type GameReport, type ServerMsg, VoiceClient } from "../lib/voice-client";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
@@ -19,6 +19,53 @@ interface Profile {
 interface Caption {
   speaker: "ai" | "candidate";
   text: string;
+}
+
+/** Virtual thumbstick for touch devices — writes screen-relative x/z into `stick`. */
+function Joystick({ stick }: { stick: { current: StickState } }) {
+  const base = useRef<HTMLDivElement>(null);
+  const pid = useRef(-1);
+  const [thumb, setThumb] = useState({ x: 0, y: 0 });
+
+  const track = (e: React.PointerEvent) => {
+    const el = base.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    let dx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2);
+    let dy = (e.clientY - (r.top + r.height / 2)) / (r.height / 2);
+    const len = Math.hypot(dx, dy);
+    if (len > 1) {
+      dx /= len;
+      dy /= len;
+    }
+    stick.current = { x: dx, z: dy };
+    setThumb({ x: dx * 36, y: dy * 36 });
+  };
+  const release = () => {
+    pid.current = -1;
+    stick.current = { x: 0, z: 0 };
+    setThumb({ x: 0, y: 0 });
+  };
+
+  return (
+    // biome-ignore lint/a11y: game control, pointer-only by design
+    <div
+      ref={base}
+      className="joystick"
+      onPointerDown={(e) => {
+        pid.current = e.pointerId;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        track(e);
+      }}
+      onPointerMove={(e) => {
+        if (e.pointerId === pid.current) track(e);
+      }}
+      onPointerUp={release}
+      onPointerCancel={release}
+    >
+      <div className="thumb" style={{ transform: `translate(${thumb.x}px, ${thumb.y}px)` }} />
+    </div>
+  );
 }
 
 /** RPG-style nameplate: avatar, name, class (role), level + XP bar. */
@@ -71,6 +118,10 @@ export default function Game() {
   const clientRef = useRef<VoiceClient | null>(null);
   // stable ref for the avatar; swapped to the live client's ref on connect
   const aiLevelRef = useRef({ current: 0 });
+  const stickRef = useRef<StickState>({ x: 0, z: 0 });
+  const [touchUi, setTouchUi] = useState(false);
+
+  useEffect(() => setTouchUi(window.matchMedia("(pointer: coarse)").matches), []);
 
   useEffect(() => () => clientRef.current?.dispose(), []);
 
@@ -194,7 +245,12 @@ export default function Game() {
     <div className="game">
       <Canvas shadows dpr={[1, 2]} camera={{ fov: 60, position: [0, 2.4, 12] }}>
         <Suspense fallback={null}>
-          <Scene phase={phase} onNearChair={setNearChair} aiLevel={aiLevelRef.current} />
+          <Scene
+            phase={phase}
+            onNearChair={setNearChair}
+            aiLevel={aiLevelRef.current}
+            stick={stickRef}
+          />
         </Suspense>
       </Canvas>
 
@@ -262,9 +318,19 @@ export default function Game() {
               {connecting
                 ? "Menyalakan mikrofon…"
                 : nearChair
-                  ? "Tekan E untuk duduk dan mulai interview"
-                  : "WASD jalan · drag mouse putar kamera · scroll zoom"}
+                  ? touchUi
+                    ? "Tap tombol Duduk untuk mulai interview"
+                    : "Tekan E untuk duduk dan mulai interview"
+                  : touchUi
+                    ? "Joystick untuk jalan · geser layar untuk putar kamera"
+                    : "WASD jalan · drag mouse putar kamera · scroll zoom"}
             </div>
+          )}
+          {phase === "explore" && touchUi && <Joystick stick={stickRef} />}
+          {phase === "explore" && touchUi && nearChair && !connecting && (
+            <button type="button" className="sit-btn" onClick={sit}>
+              🪑 Duduk
+            </button>
           )}
           {phase === "interview" && (
             <>

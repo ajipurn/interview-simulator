@@ -14,6 +14,12 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 export type GamePhase = "lobby" | "explore" | "interview" | "scoring" | "report";
 
+/** Screen-relative analog input from the touch joystick, -1..1 per axis. */
+export interface StickState {
+  x: number;
+  z: number;
+}
+
 export const SPAWN = new THREE.Vector3(0, 0, 8.5);
 /** Player chair — walking near it offers "sit", sitting starts the interview. */
 export const SIT_POS = new THREE.Vector3(0, 0, -3.9);
@@ -366,10 +372,12 @@ function Player({
   seated,
   controllable,
   onNearChair,
+  stick,
 }: {
   seated: boolean;
   controllable: boolean;
   onNearChair: (near: boolean) => void;
+  stick: { current: StickState };
 }) {
   const { scene, animations, scale } = useBlockyCharacter("/models/mini/character-male-d.glb");
   const { mixer, play } = useClips(scene, animations, PLAYER_CLIPS);
@@ -387,28 +395,40 @@ function Player({
   const dist = useRef(6.5);
 
   useEffect(() => {
-    let dragging = false;
-    const onDown = (e: MouseEvent) => {
-      if (e.button === 0 && e.target instanceof HTMLCanvasElement) dragging = true;
+    // Pointer events cover mouse AND touch; movementX is unreliable on touch,
+    // so track the last X ourselves. The joystick overlay sits above the
+    // canvas, so its touches never reach these handlers.
+    let active = -1;
+    let lastX = 0;
+    const onDown = (e: PointerEvent) => {
+      if (active === -1 && e.isPrimary !== false && e.target instanceof HTMLCanvasElement) {
+        active = e.pointerId;
+        lastX = e.clientX;
+      }
     };
-    const onMove = (e: MouseEvent) => {
-      if (dragging) yaw.current -= e.movementX * 0.006;
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerId === active) {
+        yaw.current -= (e.clientX - lastX) * 0.006;
+        lastX = e.clientX;
+      }
     };
-    const onUp = () => {
-      dragging = false;
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerId === active) active = -1;
     };
     const onWheel = (e: WheelEvent) => {
       if (e.target instanceof HTMLCanvasElement)
         dist.current = Math.min(12, Math.max(4, dist.current + e.deltaY * 0.01));
     };
-    window.addEventListener("mousedown", onDown);
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
     window.addEventListener("wheel", onWheel, { passive: true });
     return () => {
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
       window.removeEventListener("wheel", onWheel);
     };
   }, []);
@@ -445,19 +465,26 @@ function Player({
       p.set(SIT_POS.x, 0, SIT_POS.z);
       facing.current = Math.PI; // face the interviewer
     } else if (controllable) {
-      const ix = (keys.current.right ? 1 : 0) - (keys.current.left ? 1 : 0);
-      const iz = (keys.current.down ? 1 : 0) - (keys.current.up ? 1 : 0);
-      if (ix !== 0 || iz !== 0) {
+      // keyboard + joystick merge; both are screen-relative
+      let ix = (keys.current.right ? 1 : 0) - (keys.current.left ? 1 : 0) + stick.current.x;
+      let iz = (keys.current.down ? 1 : 0) - (keys.current.up ? 1 : 0) + stick.current.z;
+      const ilen = Math.hypot(ix, iz);
+      if (ilen > 1) {
+        ix /= ilen;
+        iz /= ilen;
+      }
+      if (ilen > 0.15) {
         moving = true;
-        // input is screen-relative: rotate by the camera azimuth so W always
-        // walks "up the screen", wherever the camera has been orbited to
+        // input is screen-relative: rotate by the camera azimuth so "up" always
+        // walks up the screen, wherever the camera has been orbited to
         const sy = Math.sin(yaw.current);
         const cy = Math.cos(yaw.current);
         const dx = ix * cy + iz * sy;
         const dz = iz * cy - ix * sy;
         const len = Math.hypot(dx, dz);
-        const stepX = (dx / len) * SPEED * dt;
-        const stepZ = (dz / len) * SPEED * dt;
+        // analog: speed scales with stick deflection
+        const stepX = (dx / len) * SPEED * dt * Math.min(1, len);
+        const stepZ = (dz / len) * SPEED * dt * Math.min(1, len);
         // slide along walls: try the full move, then each axis alone
         if (canWalk(p.x + stepX, p.z + stepZ)) {
           p.x += stepX;
@@ -517,10 +544,12 @@ export function Scene({
   phase,
   onNearChair,
   aiLevel,
+  stick,
 }: {
   phase: GamePhase;
   onNearChair: (near: boolean) => void;
   aiLevel: { current: number };
+  stick: { current: StickState };
 }) {
   const seated = phase === "interview" || phase === "scoring" || phase === "report";
   return (
@@ -542,7 +571,12 @@ export function Scene({
       />
       <Office dollhouse={!seated} />
       <Interviewer aiLevel={aiLevel} />
-      <Player seated={seated} controllable={phase === "explore"} onNearChair={onNearChair} />
+      <Player
+        seated={seated}
+        controllable={phase === "explore"}
+        onNearChair={onNearChair}
+        stick={stick}
+      />
     </>
   );
 }
