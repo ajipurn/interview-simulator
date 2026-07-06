@@ -122,6 +122,10 @@ export class InterviewEngine {
       this.config.targetDurationMin,
     );
     this.record("AI", utterance, "OPENING");
+    // first core question generates while the greeting plays — the first real
+    // turn then needs zero LLM calls before speaking
+    const first = this.config.competencies[0];
+    if (first) this.planner.prefetchCoreQuestion(first);
     return { utterance, done: false };
   }
 
@@ -189,6 +193,10 @@ export class InterviewEngine {
     }
     this.st.lastQuestion = utterance;
     this.record("AI", utterance, "CORE_QUESTION");
+    // while the candidate answers this one, pre-generate the next competency's
+    // question — the transition turn then costs one LLM call (analyze), not two
+    const next = this.config.competencies[this.st.competencyIndex + 1];
+    if (next) this.planner.prefetchCoreQuestion(next);
     return { utterance, done: false };
   }
 

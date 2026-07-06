@@ -12,7 +12,7 @@ import {
   scoreInterview,
 } from "@selia/engine";
 import { z } from "@selia/shared";
-import { llmFromEnv, sttFromEnv, ttsFromEnv } from "@selia/voice-core";
+import { type AudioChunk, llmFromEnv, sttFromEnv, type TtsProvider, ttsFromEnv } from "@selia/voice-core";
 import { type WebSocket, WebSocketServer } from "ws";
 import { LatencyRecorder } from "./latency.js";
 import { type AudioSink, VoicePipeline } from "./pipeline.js";
@@ -228,6 +228,26 @@ wss.on("connection", (ws, req) => {
 });
 
 /**
+ * Short acknowledgements the pipeline plays the instant a final transcript
+ * arrives, masking LLM + TTS latency (2-5s of dead air otherwise). Synthesized
+ * once per session, in the background — the greeting isn't delayed, and the
+ * first candidate answer lands well after these resolve.
+ */
+const FILLER_LINES = ["Oke.", "Baik.", "Hmm, oke.", "Oke, menarik."];
+
+function synthFillersInto(tts: TtsProvider, out: AudioChunk[][]): void {
+  for (const line of FILLER_LINES) {
+    void (async () => {
+      const chunks: AudioChunk[] = [];
+      for await (const c of tts.synthesize(line)) chunks.push(c);
+      if (chunks.length > 0) out.push(chunks);
+    })().catch((err) =>
+      console.error(JSON.stringify({ evt: "filler_synth_failed", line, err: String(err) })),
+    );
+  }
+}
+
+/**
  * One live game interview over a WebSocket — the LiveKit-free counterpart of
  * selia's agent session: same engine, same pipeline, WS frames as transport.
  */
@@ -356,12 +376,17 @@ async function runInterview(ws: WebSocket, req: IncomingMessage): Promise<void> 
     })();
   };
 
+  // mutable array shared with the pipeline — fills in the background
+  const fillers: AudioChunk[][] = [];
+  synthFillersInto(tts, fillers);
+
   const pipeline = new VoicePipeline({
     stt: sttFromEnv(CLIENT_SAMPLE_RATE),
     tts,
     responder,
     sink,
     latency: new LatencyRecorder(),
+    fillers,
     events: {
       onCaption: (speaker, text) => send({ type: "caption", speaker, text }),
       onError: (err) => console.error(JSON.stringify({ evt: "pipeline_error", err: err.message })),

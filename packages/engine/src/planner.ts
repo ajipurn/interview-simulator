@@ -35,14 +35,40 @@ function extractJson(text: string): unknown {
  * template on LLM failure — the interview never stalls on a provider error.
  */
 export class Planner {
+  /** Core questions generated ahead of need — see prefetchCoreQuestion. */
+  private prefetched = new Map<string, Promise<string>>();
+
   constructor(
     private llm: LlmProvider,
     private cfg: EngineConfig,
     private onEvent: (e: EngineEvent) => void = () => {},
   ) {}
 
-  /** Core question for a competency: CV-personalized when material exists, JD-based otherwise. */
+  /**
+   * Start generating a competency's core question now (fire-and-forget) so the
+   * later coreQuestion() await is a cache hit. Core questions depend only on
+   * the competency + JD/CV — never on the candidate's answers — so generating
+   * during the previous answer is safe and cuts a full LLM round-trip from
+   * every competency transition (and from the first turn, via begin()).
+   */
+  prefetchCoreQuestion(competency: CompetencySpec): void {
+    if (this.prefetched.has(competency.id)) return;
+    // generate() never rejects (falls back to the template) — safe to detach
+    this.prefetched.set(competency.id, this.generate(competency));
+  }
+
+  /** Core question for a competency: prefetched when available, generated otherwise. */
   async coreQuestion(competency: CompetencySpec): Promise<string> {
+    const hit = this.prefetched.get(competency.id);
+    if (hit) {
+      this.prefetched.delete(competency.id);
+      return hit;
+    }
+    return this.generate(competency);
+  }
+
+  /** CV-personalized when material exists, JD-based otherwise. */
+  private async generate(competency: CompetencySpec): Promise<string> {
     const prompt = coreQuestionPrompt({
       jobTitle: this.cfg.jobTitle,
       competency,
