@@ -10,6 +10,7 @@ import {
   InterviewEngine,
   overallScore,
   scoreInterview,
+  shield,
 } from "@selia/engine";
 import { z } from "@selia/shared";
 import { llmFromEnv, sttFromEnv, ttsFromEnv } from "@selia/voice-core";
@@ -161,12 +162,23 @@ async function createSession(req: IncomingMessage, res: ServerResponse): Promise
   }
   lim.createdToday++;
   saveLimits();
-  const { jobTitle, candidateName } = parsed.data;
+  const { candidateName } = parsed.data;
+  // one choke point: every downstream prompt and script interpolates this
+  // title, so instruction-shield it here once (80 chars still fits a payload)
+  const jobTitle = shield(parsed.data.jobTitle, 80).trim();
   // player only types a position — synthesize a minimal JD for the rubric generator
   const jdText = `Posisi yang dilamar: ${jobTitle}. Wawancara kompetensi umum untuk peran ${jobTitle} di sebuah perusahaan di Indonesia.`;
   const rubric = await generateRubric(llmFromEnv(), { jobTitle, jdText });
+  if (!rubric.jobSafe) {
+    console.log(JSON.stringify({ evt: "job_title_refused", jobTitle }));
+    sendJson(res, 400, {
+      error:
+        "Posisi itu nggak bisa Selia wawancarai. Coba ganti role-mu lewat tombol Edit dengan posisi kerja yang wajar ya.",
+    });
+    return;
+  }
   // 3 kompetensi cukup untuk satu ronde game (~8 menit)
-  const competencies: CompetencySpec[] = rubric.slice(0, 3).map((c, i) => ({
+  const competencies: CompetencySpec[] = rubric.competencies.slice(0, 3).map((c, i) => ({
     id: `c${i + 1}`,
     name: c.name,
     description: c.description,

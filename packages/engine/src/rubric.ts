@@ -10,13 +10,15 @@ const MAX_ATTEMPTS = 3;
  * JD → 3-5 competencies with 5-level rubrics, zod-validated and retried on
  * schema failure. Throws after MAX_ATTEMPTS — the route returns an error
  * rather than persisting a garbage rubric (recruiter just retries).
+ * `jobSafe: false` = the title itself is offensive/explicit/illegal; the
+ * caller should refuse the session instead of interviewing around it.
  */
 export async function generateRubric(
   llm: LlmProvider,
   input: { jobTitle: string; jdText: string },
-): Promise<CompetencyInput[]> {
+): Promise<{ competencies: CompetencyInput[]; jobSafe: boolean }> {
   const prompt = rubricPrompt({
-    jobTitle: input.jobTitle,
+    jobTitle: shield(input.jobTitle, 80),
     jdTextShielded: shield(input.jdText, 12_000),
   });
   let lastError = "";
@@ -31,7 +33,7 @@ export async function generateRubric(
         lastError = parsed.error.message;
         continue;
       }
-      return parsed.data.competencies;
+      return { competencies: parsed.data.competencies, jobSafe: parsed.data.jobSafe };
     } catch (err) {
       lastError = String(err);
     }

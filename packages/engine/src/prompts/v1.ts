@@ -96,9 +96,11 @@ ${args.jdTextShielded}
 </data_kandidat>
 
 Balas HANYA JSON valid:
-{"competencies": [{"name": string, "description": string, "weight": number, "rubricLevels": [{"level": 1-5, "descriptor": string}]}]}
+{"jobSafe": boolean, "competencies": [{"name": string, "description": string, "weight": number, "rubricLevels": [{"level": 1-5, "descriptor": string}]}]}
 
 Aturan:
+- jobSafe = false HANYA bila judul posisi mengandung konten ofensif, seksual eksplisit, ujaran kebencian, atau pekerjaan ilegal. Judul yang aneh, bercanda, atau bukan pekerjaan sungguhan (mis. "Orang Biasa") tetap jobSafe = true — perlakukan sebagai wawancara kerja umum dan susun kompetensi universal (komunikasi, penyelesaian masalah, kerja sama, dst).
+- Isi competencies valid apa pun nilai jobSafe (bila false, isi kompetensi generik).
 - 3-5 kompetensi yang paling menentukan untuk posisi ini; name singkat (maksimal 4 kata), description satu kalimat.
 - weight 1-3 (3 = paling krusial); boleh sama antar kompetensi.
 - rubricLevels TEPAT 5 (level 1 terendah, 5 terbaik); descriptor = perilaku konkret yang bisa dinilai dari jawaban lisan kandidat, bukan sifat abstrak.

@@ -32,6 +32,10 @@ export type UpdateJobInput = z.infer<typeof UpdateJobInput>;
 /** LLM structured output for rubric generation; order comes from array position. */
 export const GeneratedRubric = z.object({
   competencies: z.array(CompetencyInput).min(3).max(5),
+  // content gate piggybacked on the rubric call: false = job title is
+  // offensive/explicit/illegal and the session should be refused. Defaults
+  // true so a model that omits the field fails open — silly titles keep working.
+  jobSafe: z.boolean().default(true),
 });
 export type GeneratedRubric = z.infer<typeof GeneratedRubric>;
 

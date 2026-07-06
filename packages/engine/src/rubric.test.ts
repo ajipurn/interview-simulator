@@ -2,28 +2,29 @@ import type { LlmProvider } from "@selia/voice-core";
 import { describe, expect, it } from "vitest";
 import { generateRubric } from "./rubric.js";
 
-const VALID = JSON.stringify({
-  competencies: [
-    {
-      name: "Komunikasi",
-      description: "Menyampaikan ide dengan jelas",
-      weight: 2,
-      rubricLevels: [1, 2, 3, 4, 5].map((level) => ({ level, descriptor: `level ${level}` })),
-    },
-    {
-      name: "Orientasi Hasil",
-      description: "Fokus pada dampak terukur",
-      weight: 1,
-      rubricLevels: [1, 2, 3, 4, 5].map((level) => ({ level, descriptor: `level ${level}` })),
-    },
-    {
-      name: "Kerja Sama",
-      description: "Berkolaborasi lintas peran",
-      weight: 1,
-      rubricLevels: [1, 2, 3, 4, 5].map((level) => ({ level, descriptor: `level ${level}` })),
-    },
-  ],
-});
+const COMPETENCIES = [
+  {
+    name: "Komunikasi",
+    description: "Menyampaikan ide dengan jelas",
+    weight: 2,
+    rubricLevels: [1, 2, 3, 4, 5].map((level) => ({ level, descriptor: `level ${level}` })),
+  },
+  {
+    name: "Orientasi Hasil",
+    description: "Fokus pada dampak terukur",
+    weight: 1,
+    rubricLevels: [1, 2, 3, 4, 5].map((level) => ({ level, descriptor: `level ${level}` })),
+  },
+  {
+    name: "Kerja Sama",
+    description: "Berkolaborasi lintas peran",
+    weight: 1,
+    rubricLevels: [1, 2, 3, 4, 5].map((level) => ({ level, descriptor: `level ${level}` })),
+  },
+];
+// jobSafe deliberately absent — an older/omissive model must fail open
+const VALID = JSON.stringify({ competencies: COMPETENCIES });
+const UNSAFE = JSON.stringify({ jobSafe: false, competencies: COMPETENCIES });
 
 function scriptedLlm(replies: string[]): LlmProvider {
   let i = 0;
@@ -46,15 +47,24 @@ const INPUT = {
 };
 
 describe("generateRubric", () => {
-  it("parses a valid rubric", async () => {
-    const competencies = await generateRubric(scriptedLlm([`Berikut rubriknya:\n${VALID}`]), INPUT);
+  it("parses a valid rubric; jobSafe defaults true when omitted", async () => {
+    const { competencies, jobSafe } = await generateRubric(
+      scriptedLlm([`Berikut rubriknya:\n${VALID}`]),
+      INPUT,
+    );
     expect(competencies).toHaveLength(3);
     expect(competencies[0]?.name).toBe("Komunikasi");
     expect(competencies.every((c) => c.rubricLevels.length === 5)).toBe(true);
+    expect(jobSafe).toBe(true);
+  });
+
+  it("flags an unsafe job title", async () => {
+    const { jobSafe } = await generateRubric(scriptedLlm([UNSAFE]), INPUT);
+    expect(jobSafe).toBe(false);
   });
 
   it("retries schema failures until a valid reply", async () => {
-    const competencies = await generateRubric(
+    const { competencies } = await generateRubric(
       scriptedLlm(["bukan json", JSON.stringify({ competencies: [] }), VALID]),
       INPUT,
     );
