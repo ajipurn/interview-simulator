@@ -207,13 +207,18 @@ Aturan KERAS:
 export function openingScript(
   candidateName: string,
   jobTitle: string,
-  competencyCount: number,
+  _competencyCount: number,
   durationMin: number,
 ): string {
+  // Warm 1-on-1 opener, not a briefing: greet, seat, small reassurance, one
+  // clear cue to start. Topic count deliberately unspoken — nobody opens a
+  // real interview with "we will cover 3 topics".
   return (
-    `Halo ${candidateName}! Aku Selia, pewawancara AI untuk posisi ${jobTitle}. ` +
-    `Sesi ini sekitar ${durationMin} menit, kita akan ngobrol soal ${competencyCount} topik seputar pengalamanmu, dan di akhir kamu boleh bertanya. ` +
-    `Santai saja ya, tidak ada jawaban benar atau salah. Kalau sudah siap, bilang siap.`
+    `Halo ${candidateName}, akhirnya ketemu juga! Sini, duduk santai aja ya. ` +
+    `Aku Selia, hari ini aku yang nemenin kamu ngobrol soal posisi ${jobTitle}. ` +
+    `Anggap ini ngobrol biasa, bukan ujian — nggak ada jawaban benar atau salah, aku cuma pengin dengar ceritamu langsung. ` +
+    `Kurang lebih ${durationMin} menit, dan di akhir gantian, kamu bebas tanya apa pun ke aku. ` +
+    `Oke, tarik napas dulu boleh... kalau sudah siap, bilang aja.`
   );
 }
 

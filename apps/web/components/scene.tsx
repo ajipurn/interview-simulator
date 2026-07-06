@@ -318,7 +318,7 @@ function Office({ dollhouse }: { dollhouse: boolean }) {
 const INTERVIEWER_CLIPS = ["sit"] as const;
 
 function Interviewer({ aiLevel }: { aiLevel: { current: number } }) {
-  const { scene, animations, scale } = useBlockyCharacter("/models/mini/character-female-a.glb");
+  const { scene, animations, scale } = useBlockyCharacter("/models/mini/character-female-d.glb");
   const { mixer, play } = useClips(scene, animations, INTERVIEWER_CLIPS);
   const head = useMemo(() => scene.getObjectByName("head"), [scene]);
 
@@ -326,12 +326,14 @@ function Interviewer({ aiLevel }: { aiLevel: { current: number } }) {
 
   useFrame(({ clock }, dt) => {
     mixer.update(dt);
-    // talk cue: nod + tilt scaled by live TTS level, applied after the mixer
+    // talk cue: nod + tilt scaled by live TTS level. SET, never accumulate —
+    // this clip doesn't animate the head node, so `+=` would integrate every
+    // frame until the head keels over onto the desk.
     const level = aiLevel.current;
     const t = clock.elapsedTime;
     if (head) {
-      head.rotation.x += Math.sin(t * 13) * 0.12 * level;
-      head.rotation.z += Math.sin(t * 7) * 0.05 * level;
+      head.rotation.x = Math.sin(t * 13) * 0.12 * level;
+      head.rotation.z = Math.sin(t * 7) * 0.05 * level;
     }
   });
 
@@ -369,7 +371,7 @@ function Player({
   controllable: boolean;
   onNearChair: (near: boolean) => void;
 }) {
-  const { scene, animations, scale } = useBlockyCharacter("/models/mini/character-male-a.glb");
+  const { scene, animations, scale } = useBlockyCharacter("/models/mini/character-male-d.glb");
   const { mixer, play } = useClips(scene, animations, PLAYER_CLIPS);
   const group = useRef<THREE.Group>(null);
   const pos = useRef(SPAWN.clone());
