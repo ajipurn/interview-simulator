@@ -368,6 +368,55 @@ button:disabled {
   background: #7d4040;
 }
 
+/* --- game over (attempts exhausted, at the sealed door) --- */
+
+.gameover-zone {
+  pointer-events: none;
+  z-index: 6;
+  animation: fade-in 0.35s ease-out both;
+}
+
+.gameover {
+  text-align: center;
+  padding: 0 24px;
+}
+
+.gameover h1 {
+  margin: 0 0 18px;
+  font-family: var(--font-display), monospace;
+  font-size: 44px;
+  letter-spacing: 6px;
+  color: #e04a4a;
+  text-shadow: 4px 4px 0 #3a0d0d;
+  animation: go-flicker 1.4s steps(2) infinite;
+}
+
+@keyframes go-flicker {
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.go-msg {
+  margin: 0 0 10px;
+  font-size: 21px;
+  color: #f0d8d0;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.go-sub {
+  margin: 0;
+  font-size: 18px;
+  color: #9aa3b2;
+  text-shadow: 2px 2px 0 #000;
+}
+
+@media (max-width: 640px) {
+  .gameover h1 {
+    font-size: 28px;
+  }
+}
+
 /* --- mic meter + lobby mic test --- */
 
 .vu {

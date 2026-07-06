@@ -42,6 +42,11 @@ const SEAT_NEAR = 1.25;
 /** Newspaper on the coffee table — readable from nearby or from the sofas. */
 const PAPER_POS = new THREE.Vector3(-3.8, 0, 4.73);
 const PAPER_NEAR = 2.0;
+
+/** Attempts exhausted: this rect seals the door gap and triggers the game-over overlay. */
+const DOOR_BLOCK = { x1: -1.4, x2: 1.4, z1: -0.6, z2: 1.0 };
+const DOOR_CENTER = new THREE.Vector3(0, 0, 1.2);
+const DOOR_NEAR = 1.9;
 const SPEED = 3.1;
 const PLAYER_RADIUS = 0.3;
 /** Chibi height — mini characters normalized to this. */
@@ -362,6 +367,49 @@ function Newspaper({ onRead }: { onRead: () => void }) {
   );
 }
 
+/** Red barricade sign sealing the interview-room door when attempts run out. */
+function makeClosedSign(): THREE.CanvasTexture {
+  const c = document.createElement("canvas");
+  c.width = 512;
+  c.height = 128;
+  const g = c.getContext("2d");
+  if (g) {
+    g.fillStyle = "#a02020";
+    g.fillRect(0, 0, 512, 128);
+    // hazard stripes top & bottom
+    g.fillStyle = "#e8c34a";
+    for (let x = -32; x < 512; x += 64) {
+      g.beginPath();
+      g.moveTo(x, 0);
+      g.lineTo(x + 32, 0);
+      g.lineTo(x + 12, 18);
+      g.lineTo(x - 20, 18);
+      g.fill();
+      g.beginPath();
+      g.moveTo(x, 128);
+      g.lineTo(x + 32, 128);
+      g.lineTo(x + 12, 110);
+      g.lineTo(x - 20, 110);
+      g.fill();
+    }
+    g.fillStyle = "#ffffff";
+    g.textAlign = "center";
+    g.font = "bold 44px monospace";
+    g.fillText("LOWONGAN DITUTUP", 256, 80);
+  }
+  return new THREE.CanvasTexture(c);
+}
+
+function ClosedSign() {
+  const tex = useMemo(makeClosedSign, []);
+  return (
+    <mesh position={[0, 1.05, 0.05]}>
+      <planeGeometry args={[2.3, 0.58]} />
+      <meshStandardMaterial map={tex} side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
+
 function Painting({ x, z, rotY, color }: { x: number; z: number; rotY: number; color: string }) {
   return (
     <mesh position={[x, 1.7, z]} rotation={[0, rotY, 0]}>
@@ -523,18 +571,23 @@ function Player({
   seated,
   seat,
   controllable,
+  doorLocked,
   onNearChair,
   onNearSeat,
   onNearPaper,
+  onNearDoor,
   onStand,
   stick,
 }: {
   seated: boolean;
   seat: Seat | null;
   controllable: boolean;
+  /** Attempts exhausted — the interview-room door is sealed. */
+  doorLocked: boolean;
   onNearChair: (near: boolean) => void;
   onNearSeat: (index: number | null) => void;
   onNearPaper: (near: boolean) => void;
+  onNearDoor: (near: boolean) => void;
   onStand: () => void;
   stick: { current: StickState };
 }) {
@@ -546,6 +599,7 @@ function Player({
   const near = useRef(false);
   const nearSeat = useRef<number | null>(null);
   const nearPaper = useRef(false);
+  const nearDoor = useRef(false);
   // where the player stood before sitting down — restored on stand
   const preSit = useRef<THREE.Vector3 | null>(null);
   const wasSeatRef = useRef(false);
@@ -670,12 +724,21 @@ function Player({
         const stepX = (dx / len) * SPEED * dt * Math.min(1, len);
         const stepZ = (dz / len) * SPEED * dt * Math.min(1, len);
         // slide along walls: try the full move, then each axis alone
-        if (canWalk(p.x + stepX, p.z + stepZ)) {
+        const walk = (x: number, z: number) =>
+          canWalk(x, z) &&
+          !(
+            doorLocked &&
+            x > DOOR_BLOCK.x1 &&
+            x < DOOR_BLOCK.x2 &&
+            z > DOOR_BLOCK.z1 &&
+            z < DOOR_BLOCK.z2
+          );
+        if (walk(p.x + stepX, p.z + stepZ)) {
           p.x += stepX;
           p.z += stepZ;
-        } else if (canWalk(p.x + stepX, p.z)) {
+        } else if (walk(p.x + stepX, p.z)) {
           p.x += stepX;
-        } else if (canWalk(p.x, p.z + stepZ)) {
+        } else if (walk(p.x, p.z + stepZ)) {
           p.z += stepZ;
         }
         const target = Math.atan2(dx, dz);
@@ -700,6 +763,12 @@ function Player({
       if (si !== nearSeat.current) {
         nearSeat.current = si;
         onNearSeat(si);
+      }
+      // sealed door: approaching it triggers the game-over overlay
+      const nd = doorLocked && p.distanceTo(DOOR_CENTER) < DOOR_NEAR;
+      if (nd !== nearDoor.current) {
+        nearDoor.current = nd;
+        onNearDoor(nd);
       }
     }
 
@@ -756,6 +825,8 @@ export function Scene({
   onStand,
   onReadPaper,
   inputLocked,
+  doorLocked,
+  onNearDoor,
 }: {
   phase: GamePhase;
   onNearChair: (near: boolean) => void;
@@ -768,6 +839,9 @@ export function Scene({
   onReadPaper: () => void;
   /** True while the newspaper overlay is open — freezes player input. */
   inputLocked: boolean;
+  /** Attempts exhausted — seal the interview room, show the barricade. */
+  doorLocked: boolean;
+  onNearDoor: (near: boolean) => void;
 }) {
   const seated = phase === "interview" || phase === "scoring" || phase === "report";
   return (
@@ -789,14 +863,17 @@ export function Scene({
       />
       <Office dollhouse={!seated} />
       <Newspaper onRead={onReadPaper} />
+      {doorLocked && <ClosedSign />}
       <Interviewer aiLevel={aiLevel} />
       <Player
         seated={seated}
         seat={seat}
         controllable={phase === "explore" && !inputLocked}
+        doorLocked={doorLocked}
         onNearChair={onNearChair}
         onNearSeat={onNearSeat}
         onNearPaper={onNearPaper}
+        onNearDoor={onNearDoor}
         onStand={onStand}
         stick={stick}
       />

@@ -271,6 +271,10 @@ export default function Game() {
   const [seatIdx, setSeatIdx] = useState<number | null>(null);
   const [nearPaper, setNearPaper] = useState(false);
   const [reading, setReading] = useState(false);
+  // attempts exhausted: roam-only mode — interview room sealed, game-over at the door
+  const [lockedOut, setLockedOut] = useState(false);
+  const [lockMsg, setLockMsg] = useState("");
+  const [nearDoor, setNearDoor] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [captions, setCaptions] = useState<Caption[]>([]);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
@@ -348,6 +352,15 @@ export default function Game() {
           msg = (JSON.parse(body) as { error?: string }).error ?? msg;
         } catch {
           // non-JSON error body — keep the raw text
+        }
+        if (res.status === 429) {
+          // out of attempts — still let them into the office to roam the
+          // lobby; the interview room is sealed and shows game-over instead
+          setLockMsg(msg);
+          setLockedOut(true);
+          audio.startMusic();
+          setPhase("explore");
+          return;
         }
         throw new Error(msg);
       }
@@ -475,6 +488,8 @@ export default function Game() {
             onStand={stand}
             onReadPaper={openPaper}
             inputLocked={reading}
+            doorLocked={lockedOut}
+            onNearDoor={setNearDoor}
           />
         </Suspense>
       </Canvas>
@@ -690,6 +705,19 @@ export default function Game() {
               ketik di formulir tadi. Duduk di kursi ruang interview untuk melamar.
             </footer>
           </article>
+        </div>
+      )}
+
+      {phase === "explore" && lockedOut && nearDoor && (
+        // pointer-events: none — WASD/joystick keep working; walk away to dismiss
+        <div className="overlay dim gameover-zone">
+          <div className="gameover">
+            <h1>GAME OVER</h1>
+            <p className="go-msg">{lockMsg}</p>
+            <p className="go-sub">
+              Ruang interview sudah ditutup. Santai saja di lobby — duduk di sofa, baca koran.
+            </p>
+          </div>
         </div>
       )}
 
