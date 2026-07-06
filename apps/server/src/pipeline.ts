@@ -323,7 +323,11 @@ export class VoicePipeline {
       const iter = this.deps.tts
         .synthesize(sentence, { signal: ac.signal })
         [Symbol.asyncIterator]();
-      return { iter, first: iter.next() };
+      const first = iter.next();
+      // abort can reject this lookahead after we've stopped awaiting it —
+      // observe here or the rejection kills the process
+      first.catch(() => {});
+      return { iter, first };
     };
     try {
       let first = true;
@@ -389,7 +393,11 @@ export class VoicePipeline {
         const iter = this.deps.tts
           .synthesize(sentence, { signal: ac.signal })
           [Symbol.asyncIterator]();
-        return { sentence, iter, first: iter.next() };
+        const first = iter.next();
+        // abort can reject this lookahead after we've stopped awaiting it —
+        // observe here or the rejection kills the process
+        first.catch(() => {});
+        return { sentence, iter, first };
       };
       const pull = async () => {
         const r = await sentences.next();
@@ -399,6 +407,8 @@ export class VoicePipeline {
       while (cur) {
         if (ac.signal.aborted) return;
         const nextP = pull();
+        // same: an early return on barge-in leaves nextP un-awaited
+        nextP.catch(() => {});
         this.speakingText = cur.sentence;
         this.noteAiSpeech(cur.sentence);
         let res = await cur.first;
