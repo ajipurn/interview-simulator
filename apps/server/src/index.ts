@@ -357,7 +357,7 @@ async function runInterview(ws: WebSocket, req: IncomingMessage): Promise<void> 
   };
 
   const pipeline = new VoicePipeline({
-    stt: sttFromEnv(),
+    stt: sttFromEnv(CLIENT_SAMPLE_RATE),
     tts,
     responder,
     sink,

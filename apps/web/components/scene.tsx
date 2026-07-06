@@ -230,7 +230,6 @@ function CeilingLamp({ x, z, showFixture }: { x: number; z: number; showFixture:
 }
 
 const POSTER_URL = "https://aji.is-a.dev";
-const FIDA_URL = "https://fida.my.id";
 
 /** Portfolio hero: black, "HI, I AM", huge name, roles at the bottom. */
 function makeAjiPoster(): THREE.CanvasTexture {
@@ -259,57 +258,6 @@ function makeAjiPoster(): THREE.CanvasTexture {
     const w = g.measureText("A I   E N G I N E E R").width;
     g.fillStyle = "#8a8a8a";
     g.fillText("/   F R O N T E N D   D E V E L O P E R", 58 + w + 28, 458);
-  }
-  return new THREE.CanvasTexture(c);
-}
-
-/** Fida hero: dark navy, badge pill, serif headline, redaction terminal chip. */
-function makeFidaPoster(): THREE.CanvasTexture {
-  const c = document.createElement("canvas");
-  c.width = 1024;
-  c.height = 512;
-  const g = c.getContext("2d");
-  if (g) {
-    const bg = g.createLinearGradient(0, 0, 0, 512);
-    bg.addColorStop(0, "#0c1826");
-    bg.addColorStop(1, "#091019");
-    g.fillStyle = bg;
-    g.fillRect(0, 0, 1024, 512);
-    g.textAlign = "center";
-    // badge pill
-    g.strokeStyle = "#2a4a66";
-    g.lineWidth = 2;
-    g.beginPath();
-    g.roundRect(272, 34, 480, 44, 22);
-    g.stroke();
-    g.fillStyle = "#7fc4ef";
-    g.font = "21px monospace";
-    g.fillText("LOCAL-FIRST · AGENT-AGNOSTIC", 512, 63);
-    // headline
-    g.fillStyle = "#eef2f5";
-    g.font = "bold 58px Georgia, serif";
-    g.fillText("Let agents read your code,", 512, 175);
-    g.fillStyle = "#3aa8e8";
-    g.font = "bold 64px Georgia, serif";
-    g.fillText("not your secrets.", 512, 255);
-    // sub
-    g.fillStyle = "#9fb0c0";
-    g.font = "24px monospace";
-    g.fillText("Secret values are redacted", 512, 330);
-    g.fillText("before reaching the model.", 512, 362);
-    // terminal chip
-    g.fillStyle = "#0e1a28";
-    g.strokeStyle = "#24384e";
-    g.beginPath();
-    g.roundRect(212, 402, 600, 72, 10);
-    g.fill();
-    g.stroke();
-    g.textAlign = "left";
-    g.fillStyle = "#d7e3ee";
-    g.font = "22px monospace";
-    g.fillText("$ fida_read .env", 240, 432);
-    g.fillStyle = "#57c78a";
-    g.fillText("DEMO_CREDENTIAL=•••••••••  ✓ redacted", 240, 462);
   }
   return new THREE.CanvasTexture(c);
 }
@@ -462,14 +410,6 @@ function Office({ dollhouse }: { dollhouse: boolean }) {
           wall can be a stub in dollhouse view, so hide it all there */}
       {!dollhouse && (
         <>
-          {/* west wall, between the window and the back corner — the bookcase was
-              covering it on the back wall */}
-          <Poster
-            position={[-4.41, 1.7, -5.75]}
-            rotY={Math.PI / 2}
-            url={FIDA_URL}
-            make={makeFidaPoster}
-          />
           <Poster position={[1.8, 1.7, -6.91]} url={POSTER_URL} make={makeAjiPoster} />
           <Painting x={-6.92} z={1.5} rotY={Math.PI / 2} color="#c96f4a" />
           {[3, 7].map((z) => (
@@ -680,17 +620,21 @@ function Player({
     };
   }, []);
 
-  // save the walkable spot on sit-down, restore it on stand-up
-  useEffect(() => {
-    if (seat && !wasSeatRef.current) preSit.current = pos.current.clone();
-    else if (!seat && wasSeatRef.current && preSit.current) pos.current.copy(preSit.current);
-    wasSeatRef.current = !!seat;
-  }, [seat]);
-
   useFrame((_, rawDt) => {
     const dt = Math.min(rawDt, 0.05);
     const p = pos.current;
     let moving = false;
+
+    // sit/stand transitions live in the frame loop, not an effect: useFrame
+    // runs on rAF and can fire before a passive effect flushes, so an effect
+    // would save preSit only after the first seated frame already snapped p
+    // onto the sofa (inside a blocker) — stand-up would then restore into the
+    // blocker and canWalk would pin the player there forever.
+    if (!!seat !== wasSeatRef.current) {
+      if (seat) preSit.current = p.clone(); // still the walkable approach spot
+      else if (preSit.current) p.copy(preSit.current);
+      wasSeatRef.current = !!seat;
+    }
 
     if (seated) {
       p.set(SIT_POS.x, 0, SIT_POS.z);

@@ -535,7 +535,7 @@ export default function Game() {
             </header>
             <h2 className="np-head">AJI PURNOMO: DALANG DI BALIK KANTOR VIRTUAL INI</h2>
             <p className="np-deck">
-              Satu developer, satu kantor pixel, satu misi: bikin latihan interview tidak lagi menyeramkan.
+              Satu developer, satu misi: bikin latihan interview tidak lagi menyeramkan.
             </p>
             <div className="np-cols">
               <p>
@@ -545,8 +545,8 @@ export default function Game() {
                 Developer.
               </p>
               <p>
-                Saksi mata melaporkan Aji terbiasa menggarap antarmuka web di siang hari dan menyetel
-                model AI di malam hari. &ldquo;Kalau ketemu bug, saya tatap dulu lima menit. Kadang
+                Saksi mata melaporkan Aji terbiasa menyetel
+                model AI di siang hari dan menggarap antarmuka web di malam hari. &ldquo;Kalau ketemu bug, saya tatap dulu lima menit. Kadang
                 bugnya sadar diri lalu pergi sendiri,&rdquo; ujarnya santai kepada wartawan kami.
               </p>
               <aside className="np-facts">
@@ -567,7 +567,7 @@ export default function Game() {
                       Fida
                     </a>
                   </li>
-                  <li>Status: bisa di-hire (buruan)</li>
+                  <li>Status: open freelance akhir pekan (buruan)</li>
                 </ul>
               </aside>
               <p>

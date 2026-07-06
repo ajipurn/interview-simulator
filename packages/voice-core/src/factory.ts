@@ -16,10 +16,16 @@ function required(name: string): string {
   return v;
 }
 
-export function sttFromEnv(): SttProvider {
+/**
+ * `sampleRate` must match the PCM actually pushed into the stream — Deepgram
+ * decodes linear16 at exactly this rate. A mismatch (e.g. 16k audio declared
+ * as the 48k default) plays back 3× fast on their end: zero words recognized,
+ * no finals, and the interview silently stalls after the greeting.
+ */
+export function sttFromEnv(sampleRate = 48000): SttProvider {
   switch (process.env.STT_PROVIDER ?? "mock") {
     case "deepgram":
-      return new DeepgramSttProvider(required("DEEPGRAM_API_KEY"));
+      return new DeepgramSttProvider(required("DEEPGRAM_API_KEY"), sampleRate);
     default: {
       // MOCK_STT_SCRIPT: JSON array of utterances the mock "hears" (E2E fixtures)
       const script = process.env.MOCK_STT_SCRIPT
