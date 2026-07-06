@@ -8,7 +8,7 @@
  * E to sit); the interviewer nods along with the AI's live audio level.
  */
 import { useFrame, useLoader, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
@@ -211,6 +211,66 @@ function CeilingLamp({ x, z, showFixture }: { x: number; z: number; showFixture:
   );
 }
 
+/** Where the clickable wall poster points. Swap the texture by editing makePosterTexture. */
+const POSTER_URL = "https://kenney.nl";
+
+function makePosterTexture(): THREE.CanvasTexture {
+  const c = document.createElement("canvas");
+  c.width = 512;
+  c.height = 340;
+  const g = c.getContext("2d");
+  if (g) {
+    g.fillStyle = "#171c26";
+    g.fillRect(0, 0, 512, 340);
+    g.strokeStyle = "#4a86c9";
+    g.lineWidth = 14;
+    g.strokeRect(7, 7, 498, 326);
+    g.fillStyle = "#e8e6e1";
+    g.font = "bold 44px monospace";
+    g.textAlign = "center";
+    g.fillText("INTERVIEW", 256, 110);
+    g.fillText("SIMULATOR", 256, 160);
+    g.fillStyle = "#7fb0e8";
+    g.font = "28px monospace";
+    g.fillText("assets: kenney.nl", 256, 230);
+    g.fillStyle = "#6ad08a";
+    g.font = "24px monospace";
+    g.fillText("[ klik untuk buka ]", 256, 290);
+  }
+  return new THREE.CanvasTexture(c);
+}
+
+/** Wall art that opens a URL when clicked; glows + cursor on hover. */
+function Poster({ position, url }: { position: [number, number, number]; url: string }) {
+  const tex = useMemo(makePosterTexture, []);
+  const [hover, setHover] = useState(false);
+  useEffect(() => {
+    document.body.style.cursor = hover ? "pointer" : "auto";
+    return () => {
+      document.body.style.cursor = "auto";
+    };
+  }, [hover]);
+  return (
+    <mesh
+      position={position}
+      scale={hover ? 1.06 : 1}
+      onClick={(e) => {
+        e.stopPropagation();
+        window.open(url, "_blank", "noopener,noreferrer");
+      }}
+      onPointerOver={() => setHover(true)}
+      onPointerOut={() => setHover(false)}
+    >
+      <planeGeometry args={[1.5, 1.0]} />
+      <meshStandardMaterial
+        map={tex}
+        emissive={hover ? "#3a4b66" : "#000000"}
+        emissiveIntensity={0.8}
+      />
+    </mesh>
+  );
+}
+
 function Painting({ x, z, rotY, color }: { x: number; z: number; rotY: number; color: string }) {
   return (
     <mesh position={[x, 1.7, z]} rotation={[0, rotY, 0]}>
@@ -260,7 +320,7 @@ function Office({ dollhouse }: { dollhouse: boolean }) {
       {!dollhouse && (
         <>
           <Painting x={-1.8} z={-6.92} rotY={0} color="#c9a84a" />
-          <Painting x={1.8} z={-6.92} rotY={0} color="#4a86c9" />
+          <Poster position={[1.8, 1.7, -6.91]} url={POSTER_URL} />
           <Painting x={-6.92} z={1.5} rotY={Math.PI / 2} color="#c96f4a" />
           {[3, 7].map((z) => (
             <mesh key={z} position={[-6.92, 1.6, z]} rotation={[0, Math.PI / 2, 0]}>
