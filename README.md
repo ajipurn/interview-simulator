@@ -1,84 +1,99 @@
 # Interview Simulator
 
-Game web 3D untuk latihan wawancara kerja: buat karakter, ketik posisi yang dilamar, jalan-jalan di kantor pixel, duduk di kursi interview, lalu **wawancara suara real-time** dengan AI interviewer berbahasa Indonesia — diakhiri report skor per kompetensi + feedback.
+A 3D web game for practicing job interviews: create a character, type the role you're applying for, walk around a pixel office, take a seat in the interview room, and have a **real-time voice interview** with an AI interviewer (in Indonesian) — ending with a per-competency score report and feedback.
 
-> Tanpa API key pun jalan: semua provider default `mock` (offline penuh). Interviewer bicara nada sinus dan jawaban kandidat di-script — cukup untuk mencoba seluruh alur game.
+> Runs without any API keys: every provider defaults to `mock` (fully offline). The interviewer speaks in sine beeps and candidate answers are scripted — enough to try the whole game loop.
 
-## Fitur
+## Features
 
-- **Wawancara suara dua arah** — STT streaming dengan barge-in (potong ucapan interviewer kapan saja), TTS per kalimat dengan satu kalimat lookahead, caption live yang sinkron dengan audio.
-- **Interview engine terstruktur** — state machine `OPENING → per kompetensi (core question + probe) → pertanyaan kandidat → CLOSING`. Rubric kompetensi digenerate dari posisi yang diketik; setiap ucapan AI melewati guardrail deterministik (anti bocor skor, redirect off-topic).
-- **Respons terasa instan** — acknowledgement pendek pre-synthesized diputar begitu transkrip final tiba (menutup latency LLM+TTS), core question berikutnya di-prefetch saat kandidat masih menjawab, dan latency tiap giliran ter-log (`turn_latency`, budget p50 < 1,5s).
-- **Report akhir** — skor 1–5 per kompetensi + justifikasi, kekuatan, area berkembang, dan tips.
-- **Kantor 3D interaktif** — third-person (WASD / joystick touch), duduk di sofa mana pun, baca koran profil di meja tamu, tes mic di lobby, VU meter live selama interview.
-- **Game over** — jatah interview habis? Tetap bisa masuk kantor dan santai di lobby; pintu ruang interview disegel papan "LOWONGAN DITUTUP".
+- **Two-way voice conversation** — streaming STT with barge-in (interrupt the interviewer any time), sentence-by-sentence TTS with one-sentence lookahead, live captions synced to the audio.
+- **Structured interview engine** — a state machine: `OPENING → per competency (core question + probe) → candidate questions → CLOSING`. The competency rubric is generated from the role you type; every AI utterance passes deterministic guardrails (no score leaks, off-topic redirects).
+- **Feels instant** — pre-synthesized acknowledgements play the moment your answer's final transcript arrives (masking LLM + TTS latency), the next core question is prefetched while you're still answering, and per-turn latency is logged (`turn_latency`, p50 budget < 1.5s).
+- **Final report** — 1–5 score per competency with justification, strengths, growth areas, and tips.
+- **An interactive 3D office** — third-person controls (WASD / touch joystick), sit on any sofa, read the newspaper on the coffee table, test your mic in the lobby, live VU meter during the interview.
+- **Game over** — out of interview attempts? You can still enter the office and hang out in the lobby; the interview-room door is sealed with a "POSITION CLOSED" barricade.
 
-## Arsitektur
+## Architecture
 
-Monorepo pnpm. Mesin interview & provider suara diambil dari selia (proyek interview-agent berbasis LiveKit); transport diganti WebSocket polos.
+A pnpm monorepo. The interview engine and voice providers were extracted from selia (a LiveKit-based interview-agent project); the transport was replaced with a plain WebSocket.
 
-| Bagian | Peran |
+| Part | Role |
 |---|---|
-| `packages/engine` | State machine interview, planner LLM, guardrails, rubric, scoring, feedback |
-| `packages/voice-core` | Provider STT / LLM / TTS yang bisa ditukar via env (default mock) |
+| `packages/engine` | Interview state machine, LLM planner, guardrails, rubric, scoring, feedback |
+| `packages/voice-core` | Swappable STT / LLM / TTS providers, selected via env (default: mock) |
 | `packages/shared` | Zod schemas |
-| `apps/server` | HTTP + WebSocket: session, voice pipeline (STT → engine → TTS), budget guardrails |
-| `apps/web` | Next.js + React Three Fiber: kantor 3D, HUD, klien audio WS |
+| `apps/server` | HTTP + WebSocket: sessions, the voice pipeline (STT → engine → TTS), budget guardrails |
+| `apps/web` | Next.js + React Three Fiber: the 3D office, HUD, WS audio client |
 
-## Menjalankan
+## Running
 
 ```bash
 pnpm install
 pnpm dev        # server :4001 + web :3002
 ```
 
-Buka http://localhost:3002. Untuk suara & otak asli, `cp .env.example .env` lalu isi provider (lihat tabel di bawah).
+Open http://localhost:3002. For a real voice and brain, `cp .env.example .env` and configure providers (table below).
 
 ```bash
-pnpm smoke      # e2e offline: session → WS → interview penuh → report
+pnpm smoke      # offline e2e: session → WS → full interview → report
 pnpm typecheck
-pnpm test       # unit test engine + voice-core
+pnpm test       # engine + voice-core unit tests
 ```
 
-## Provider (.env)
+## Providers (.env)
 
-Pilih lewat `STT_PROVIDER`, `LLM_PROVIDER`, `TTS_PROVIDER` — semua default `mock`.
+Selected via `STT_PROVIDER`, `LLM_PROVIDER`, `TTS_PROVIDER` — all default to `mock`.
 
-| Jenis | Pilihan | Env yang dibutuhkan |
+| Kind | Option | Required env |
 |---|---|---|
 | STT | `deepgram` | `DEEPGRAM_API_KEY` |
 | LLM | `anthropic` | `ANTHROPIC_API_KEY` |
 | | `openai` | `OPENAI_API_KEY` |
 | | `azure-openai` | `AZURE_OPENAI_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT` |
 | | `gemini` | `GEMINI_API_KEY` |
-| TTS | `gcloud` | `GOOGLE_APPLICATION_CREDENTIALS` (service account) atau `GOOGLE_TTS_API_KEY` |
+| TTS | `gcloud` | `GOOGLE_APPLICATION_CREDENTIALS` (service account) or `GOOGLE_TTS_API_KEY` |
 | | `azure` | `AZURE_SPEECH_KEY` |
 | | `elevenlabs` | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` |
 | | `gemini` / `edge` | `GEMINI_API_KEY` / — |
 
-## Protokol WS (apps/server)
+## WS protocol (apps/server)
 
 - Client → server: binary = PCM int16 mono 16 kHz (mic), JSON `{type:"end"}`
-- Server → client: binary = PCM int16 TTS (`ttsSampleRate` dari `ready`), JSON `ready | caption | clear (barge-in) | progress | scoring | report | denied`
+- Server → client: binary = PCM int16 TTS (`ttsSampleRate` from `ready`), JSON `ready | caption | clear (barge-in) | progress | scoring | report | denied`
 
-## Kontrol
+## Controls
 
-- **Desktop**: WASD / panah jalan · drag mouse putar kamera · scroll zoom · `E` duduk (kursi interview = mulai wawancara, sofa lobby = santai) · `R` baca koran · `Esc` tutup.
-- **Touch**: joystick kiri bawah + tombol kontekstual (Duduk / Berdiri / Koran).
+- **Desktop**: WASD / arrows to walk · drag mouse to orbit the camera · scroll to zoom · `E` to sit (interview chair starts the interview, lobby sofas are just for lounging) · `R` to read the newspaper · `Esc` to close it.
+- **Touch**: joystick bottom-left + contextual buttons (Sit / Stand / Newspaper).
 
 ## Guardrails & budget
 
-Ucapan AI melewati guardrail deterministik bawaan engine (anti bocor skor, redirect off-topic). Proteksi biaya di server (override via env, lihat `.env.example`):
+Every AI utterance passes the engine's deterministic guardrails (no score leaks, off-topic redirects). The server adds cost protection (all overridable via env, see `.env.example`):
 
-- **Maks 2 interview per IP, seumur hidup** — persist di `apps/server/data/limits.json` (hapus file untuk reset saat dev, atau set `MAX_ATTEMPTS`).
-- Maks 6 pembuatan session per IP per hari (tiap `POST /session` = 1 panggilan LLM rubric).
-- Watchdog: interview dipaksa selesai setelah 12 menit, atau 3 menit idle (mic nyala tanpa jawaban) — STT streaming dibayar per menit.
+- **Max 2 interviews per IP, lifetime** — persisted in `apps/server/data/limits.json` (delete the file to reset during dev, or set `MAX_ATTEMPTS`).
+- Max 6 session creations per IP per day (each `POST /session` costs one rubric LLM call).
+- Watchdog: an interview is force-finished after 12 minutes, or after 3 minutes of idle (mic open, nobody answering) — streaming STT bills per minute.
 
-## Asset 3D
+## Deploying
 
-Semua CC0 dari [Kenney](https://kenney.nl) (License.txt ikut di tiap folder):
+The web app is a standard Next.js app — Vercel works out of the box (root directory: `apps/web`). The server needs a **persistent Node process** (long-lived WebSockets, in-memory sessions): Railway, Render, Fly.io, or any VPS — not serverless. Start it with `pnpm --dir apps/server start`; it respects `PORT`.
 
-- Karakter: [Mini Characters](https://kenney.nl/assets/mini-characters) — `apps/web/public/models/mini/`. Hanya yang dipakai yang di-ship: player `character-male-d`, interviewer `character-female-d` (tekstur `Textures/colormap.png` dipakai bersama). Ganti karakter: unduh pack-nya, salin `character-*.glb` lain, ganti nama file di `scene.tsx`.
-- Furnitur: [Furniture Kit](https://kenney.nl/assets/furniture-kit) — `apps/web/public/models/furniture/`. Origin kit di sudut, komponen `Furn` me-recenter otomatis; skala global `FURN_SCALE`.
+Point the web app at the server via env, and use TLS — `getUserMedia` (mic) requires HTTPS, which also means the socket must be `wss://`:
 
-Dinding/lantai tetap primitif R3F — mereka yang mendefinisikan peta collision (`REGIONS`/`BLOCKERS` di `scene.tsx`). Musik & SFX disintesis via WebAudio (chiptune, nol file asset).
+```
+NEXT_PUBLIC_API_URL=https://your-server.example.com
+NEXT_PUBLIC_WS_URL=wss://your-server.example.com
+```
+
+## 3D assets
+
+All CC0 from [Kenney](https://kenney.nl) (License.txt ships in each folder):
+
+- Characters: [Mini Characters](https://kenney.nl/assets/mini-characters) — `apps/web/public/models/mini/`. Only the used models ship: player `character-male-d`, interviewer `character-female-d` (sharing `Textures/colormap.png`). To swap characters, download the pack, copy another `character-*.glb` in, and change the filename in `scene.tsx`.
+- Furniture: [Furniture Kit](https://kenney.nl/assets/furniture-kit) — `apps/web/public/models/furniture/`. Kit origins sit at a corner; the `Furn` component recenters automatically, with a global `FURN_SCALE`.
+
+Walls and floors stay as R3F primitives — they define the collision map (`REGIONS`/`BLOCKERS` in `scene.tsx`). Music and SFX are synthesized with WebAudio (chiptune, zero asset files).
+
+## License
+
+[MIT](LICENSE). Kenney assets are CC0.
