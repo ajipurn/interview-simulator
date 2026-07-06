@@ -11,7 +11,6 @@ import { useFrame, useLoader, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { sfx } from "../lib/audio";
 
 export type GamePhase = "lobby" | "explore" | "interview" | "scoring" | "report";
 
@@ -511,7 +510,6 @@ function Player({
   const facing = useRef(Math.PI); // toward -z, into the office
   const near = useRef(false);
   const keys = useRef({ up: false, down: false, left: false, right: false });
-  const lastStep = useRef(0);
   const camGoal = useMemo(() => new THREE.Vector3(), []);
   const lookGoal = useMemo(() => new THREE.Vector3(), []);
   const look = useMemo(() => new THREE.Vector3(0, 1, SPAWN.z), []);
@@ -635,15 +633,6 @@ function Player({
 
     play(seated ? "sit" : moving ? "walk" : "idle");
     mixer.update(dt);
-
-    // footstep blips paced to the walk cycle
-    if (moving) {
-      const now = performance.now();
-      if (now - lastStep.current > 330) {
-        sfx("step");
-        lastStep.current = now;
-      }
-    }
 
     const g = group.current;
     if (g) {

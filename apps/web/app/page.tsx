@@ -282,7 +282,7 @@ export default function Game() {
             <p className="sub">
               {profile
                 ? "Ubah nama atau posisi yang kamu lamar."
-                : "Buat karaktermu sekali — nanti tinggal masuk kantor, jalan ke ruang interview, duduk, dan jawab dengan suaramu."}
+                : "Selamat datang! di PT Mencari Cuan Sejati."}
             </p>
             <label>
               Nama panggilan
@@ -304,7 +304,7 @@ export default function Game() {
                 required
               />
             </label>
-            <button type="submit">Simpan karakter</button>
+            <button type="submit">Simpan</button>
             {profile && (
               <button type="button" className="ghost" onClick={() => setEditing(false)}>
                 Batal
@@ -320,8 +320,7 @@ export default function Game() {
             <h1>Interview Simulator</h1>
             <ProfilePlate profile={profile} completed={completed} onEdit={() => setEditing(true)} />
             <p className="sub" style={{ marginTop: 16 }}>
-              Jalan ke ruang interview (WASD), duduk (E), dan jawab dengan suaramu — seperti
-              wawancara sungguhan.
+              Jalan ke ruang interview (WASD), duduk (E), dan selamat berjuang!.
             </p>
             <button type="button" onClick={() => void start()} disabled={busy}>
               {busy ? "Menyiapkan ruangan…" : "▶ Masuk ke kantor"}

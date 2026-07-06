@@ -119,25 +119,7 @@ function blip(
   o.stop(at + dur + 0.02);
 }
 
-/** Short filtered-noise burst (footsteps). */
-function thud(c: AudioContext, out: GainNode, at: number): void {
-  const n = Math.floor(c.sampleRate * 0.06);
-  const buf = c.createBuffer(1, n, c.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
-  const src = c.createBufferSource();
-  src.buffer = buf;
-  src.playbackRate.value = 0.8 + Math.random() * 0.4;
-  const f = c.createBiquadFilter();
-  f.type = "bandpass";
-  f.frequency.value = 320 + Math.random() * 180;
-  const g = c.createGain();
-  g.gain.value = 0.25;
-  src.connect(f).connect(g).connect(out);
-  src.start(at);
-}
-
-export type SfxName = "click" | "step" | "sit" | "success";
+export type SfxName = "click" | "sit" | "success";
 
 export function sfx(name: SfxName): void {
   const c = ensure();
@@ -146,9 +128,6 @@ export function sfx(name: SfxName): void {
   switch (name) {
     case "click":
       blip(c, sfxGain, "square", 880, t, 0.07, 0.12);
-      break;
-    case "step":
-      thud(c, sfxGain, t);
       break;
     case "sit":
       blip(c, sfxGain, "triangle", 320, t, 0.28, 0.2, 130);
