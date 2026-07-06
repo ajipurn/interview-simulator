@@ -305,10 +305,11 @@ button:disabled {
 
 .edit {
   width: auto;
-  padding: 6px 9px;
-  font-size: 14px;
-  font-family: var(--font-body), monospace;
+  padding: 7px 9px;
+  display: flex;
+  align-items: center;
   background: #2a3242;
+  color: #d7e3ee;
 }
 
 .edit:hover {
@@ -331,16 +332,40 @@ button:disabled {
   top: 70px;
   right: 16px;
   width: auto;
-  padding: 9px 11px;
-  font-size: 15px;
+  padding: 9px 10px;
+  display: flex;
+  align-items: center;
   background: rgba(14, 18, 24, 0.72);
   border: 1px solid #2a3242;
   border-radius: 10px;
   pointer-events: auto;
+  color: #b9c2d0;
 }
 
 .mute-btn:hover {
   background: #1c2433;
+}
+
+.mic-btn {
+  width: auto;
+  padding: 7px 9px;
+  display: flex;
+  align-items: center;
+  background: #2a3242;
+  border-radius: 8px;
+  color: #d7e3ee;
+}
+
+.mic-btn:hover {
+  background: #39455c;
+}
+
+.mic-btn.off {
+  background: #6a3434;
+}
+
+.mic-btn.off:hover {
+  background: #7d4040;
 }
 
 /* --- touch controls --- */

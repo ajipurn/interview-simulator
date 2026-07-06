@@ -82,6 +82,12 @@ export function startMusic(): void {
   nextBarAt = c.currentTime + 0.1;
   barIndex = 0;
   const tick = () => {
+    // muted → schedule nothing at all (oscillators cost real CPU); keep the
+    // clock caught up so unmuting doesn't burst a backlog of bars
+    if (muted) {
+      nextBarAt = Math.max(nextBarAt, c.currentTime);
+      return;
+    }
     // keep one bar scheduled ahead of the clock
     while (nextBarAt < c.currentTime + BAR_S) {
       scheduleBar(c, nextBarAt, CHORDS[barIndex % CHORDS.length] ?? CHORDS[0] ?? []);

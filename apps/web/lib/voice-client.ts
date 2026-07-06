@@ -215,6 +215,11 @@ export class VoiceClient {
     this.ws?.send(JSON.stringify({ type: "end" }));
   }
 
+  /** Mic toggle: a disabled track streams silence — STT stays connected, hears nothing. */
+  setMicEnabled(on: boolean): void {
+    for (const t of this.stream?.getAudioTracks() ?? []) t.enabled = on;
+  }
+
   dispose(): void {
     this.cleanupResume();
     cancelAnimationFrame(this.raf);

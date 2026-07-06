@@ -22,6 +22,76 @@ interface Caption {
   text: string;
 }
 
+// --- pixel icons (crispEdges SVG on a 12×12 grid — matches the 8-bit fonts) ---
+
+type Cell = [number, number, number?, number?];
+
+function PxIcon({ cells, accent = [] }: { cells: Cell[]; accent?: Cell[] }) {
+  const rects = (list: Cell[]) =>
+    list.map(([x, y, w = 1, h = 1]) => <rect key={`${x}-${y}`} x={x} y={y} width={w} height={h} />);
+  return (
+    <svg width="14" height="14" viewBox="0 0 12 12" shapeRendering="crispEdges" aria-hidden>
+      <g fill="currentColor">{rects(cells)}</g>
+      <g fill="#e07a6a">{rects(accent)}</g>
+    </svg>
+  );
+}
+
+const SPEAKER: Cell[] = [
+  [1, 4, 2, 4],
+  [3, 3, 1, 6],
+  [4, 2, 1, 8],
+];
+const SPEAKER_WAVES: Cell[] = [
+  [6, 5, 1, 2],
+  [8, 3, 1, 1],
+  [9, 4, 1, 4],
+  [8, 8, 1, 1],
+];
+const SPEAKER_X: Cell[] = [[7, 4], [9, 4], [8, 5], [7, 6], [9, 6]];
+const MIC: Cell[] = [
+  [5, 1, 2, 6],
+  [3, 4, 1, 3],
+  [8, 4, 1, 3],
+  [4, 7, 4, 1],
+  [5, 8, 2, 1],
+  [4, 9, 4, 1],
+];
+const SLASH: Cell[] = [
+  [2, 10],
+  [3, 9],
+  [4, 8],
+  [5, 7],
+  [6, 6],
+  [7, 5],
+  [8, 4],
+  [9, 3],
+  [10, 2],
+];
+const PENCIL: Cell[] = [
+  [2, 9],
+  [2, 8],
+  [3, 9],
+  [3, 7],
+  [4, 8],
+  [4, 6],
+  [5, 7],
+  [5, 5],
+  [6, 6],
+  [6, 4],
+  [7, 5],
+  [7, 3],
+  [8, 4],
+  [8, 2],
+  [9, 3],
+];
+
+const IconSpeakerOn = () => <PxIcon cells={[...SPEAKER, ...SPEAKER_WAVES]} />;
+const IconSpeakerOff = () => <PxIcon cells={SPEAKER} accent={SPEAKER_X} />;
+const IconMicOn = () => <PxIcon cells={MIC} />;
+const IconMicOff = () => <PxIcon cells={MIC} accent={SLASH} />;
+const IconPencil = () => <PxIcon cells={PENCIL} />;
+
 /** Virtual thumbstick for touch devices — writes screen-relative x/z into `stick`. */
 function Joystick({ stick }: { stick: { current: StickState } }) {
   const base = useRef<HTMLDivElement>(null);
@@ -93,7 +163,7 @@ function ProfilePlate({
       <span className="lv">LV {completed + 1}</span>
       {onEdit && (
         <button type="button" className="edit" onClick={onEdit} title="Edit karakter">
-          ✎
+          <IconPencil />
         </button>
       )}
     </div>
@@ -125,6 +195,7 @@ export default function Game() {
   useEffect(() => setTouchUi(window.matchMedia("(pointer: coarse)").matches), []);
 
   const [mutedUi, setMutedUi] = useState(false);
+  const [micOn, setMicOn] = useState(true);
   useEffect(() => setMutedUi(audio.isMuted()), []);
 
   // one listener gives every button a click blip
@@ -236,6 +307,7 @@ export default function Game() {
       .then(() => {
         aiLevelRef.current = client.aiLevel;
         setConnecting(false);
+        setMicOn(true);
         setPhase("interview");
       })
       .catch((err) => {
@@ -342,7 +414,7 @@ export default function Game() {
               setMutedUi(!mutedUi);
             }}
           >
-            {mutedUi ? "🔇" : "🔊"}
+            {mutedUi ? <IconSpeakerOff /> : <IconSpeakerOn />}
           </button>
           {phase === "explore" && (
             <div className="hint">
@@ -360,12 +432,25 @@ export default function Game() {
           {phase === "explore" && touchUi && <Joystick stick={stickRef} />}
           {phase === "explore" && touchUi && nearChair && !connecting && (
             <button type="button" className="sit-btn" onClick={sit}>
-              🪑 Duduk
+              Duduk
             </button>
           )}
           {phase === "interview" && (
             <>
               <div className="topbar">
+                <button
+                  type="button"
+                  className={`mic-btn${micOn ? "" : " off"}`}
+                  aria-pressed={!micOn}
+                  aria-label={micOn ? "Matikan mikrofon" : "Nyalakan mikrofon"}
+                  onClick={() => {
+                    const next = !micOn;
+                    clientRef.current?.setMicEnabled(next);
+                    setMicOn(next);
+                  }}
+                >
+                  {micOn ? <IconMicOn /> : <IconMicOff />}
+                </button>
                 <span className="live">● live</span>
                 {progress.total > 0 && (
                   <span>
@@ -439,7 +524,11 @@ export default function Game() {
                 </ul>
               </>
             )}
-            {report.tips && <p className="tips">💡 {report.tips}</p>}
+            {report.tips && (
+              <p className="tips">
+                <b>TIP:</b> {report.tips}
+              </p>
+            )}
             <button type="button" onClick={() => window.location.reload()}>
               Main lagi (LV {completed + 1})
             </button>
