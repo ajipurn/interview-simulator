@@ -3,6 +3,7 @@
 import { Canvas } from "@react-three/fiber";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { type GamePhase, Scene, type StickState } from "../components/scene";
+import * as audio from "../lib/audio";
 import { type GameReport, type ServerMsg, VoiceClient } from "../lib/voice-client";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
@@ -123,6 +124,23 @@ export default function Game() {
 
   useEffect(() => setTouchUi(window.matchMedia("(pointer: coarse)").matches), []);
 
+  const [mutedUi, setMutedUi] = useState(false);
+  useEffect(() => setMutedUi(audio.isMuted()), []);
+
+  // one listener gives every button a click blip
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (e.target instanceof HTMLElement && e.target.closest("button")) audio.sfx("click");
+    };
+    window.addEventListener("click", onClick);
+    return () => window.removeEventListener("click", onClick);
+  }, []);
+
+  // music under the interviewer's voice, full volume while roaming
+  useEffect(() => {
+    if (phase !== "lobby") audio.duckMusic(phase === "interview" || phase === "scoring");
+  }, [phase]);
+
   useEffect(() => () => clientRef.current?.dispose(), []);
 
   // character is created once and persisted; the form comes back only via Edit
@@ -172,6 +190,7 @@ export default function Game() {
       }
       const data = (await res.json()) as { sessionId: string };
       sessionRef.current = data.sessionId;
+      audio.startMusic(); // inside the click gesture — autoplay-safe
       setPhase("explore");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -194,6 +213,7 @@ export default function Game() {
     else if (msg.type === "progress") setProgress({ current: msg.current, total: msg.total });
     else if (msg.type === "scoring") setPhase("scoring");
     else if (msg.type === "report") {
+      audio.sfx("success");
       setReport(msg.report);
       setPhase("report");
       setCompleted((c) => {
@@ -206,6 +226,7 @@ export default function Game() {
   const sit = useCallback(() => {
     const session = sessionRef.current;
     if (!session || clientRef.current) return;
+    audio.sfx("sit");
     setConnecting(true);
     const client = new VoiceClient();
     client.onMessage = handleMessage;
@@ -313,6 +334,17 @@ export default function Game() {
       {phase !== "lobby" && profile && (
         <div className="hud">
           <ProfilePlate profile={profile} completed={completed} />
+          <button
+            type="button"
+            className="mute-btn"
+            title={mutedUi ? "Nyalakan suara" : "Bisukan"}
+            onClick={() => {
+              audio.setMuted(!mutedUi);
+              setMutedUi(!mutedUi);
+            }}
+          >
+            {mutedUi ? "🔇" : "🔊"}
+          </button>
           {phase === "explore" && (
             <div className="hint">
               {connecting
