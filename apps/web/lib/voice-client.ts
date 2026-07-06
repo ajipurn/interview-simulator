@@ -22,7 +22,10 @@ export type ServerMsg =
   | { type: "progress"; current: number; total: number; phase: string }
   | { type: "scoring" }
   | { type: "report"; report: GameReport }
-  | { type: "denied"; reason: string };
+  | { type: "denied"; reason: string }
+  // synthesized client-side when the socket drops without us closing it —
+  // the server never sends this
+  | { type: "disconnected" };
 
 const CAPTURE_WORKLET = `
 class Capture extends AudioWorkletProcessor {
@@ -95,6 +98,8 @@ export class VoiceClient {
   private raf = 0;
   private stream: MediaStream | null = null;
   private cleanupResume: () => void = () => {};
+  /** True once dispose() runs — an onclose after that is expected, not a drop. */
+  private closedByUs = false;
 
   async connect(wsUrl: string): Promise<void> {
     // mic capture
@@ -159,6 +164,12 @@ export class VoiceClient {
       ws.onopen = () => resolve();
       ws.onerror = () => reject(new Error("WebSocket gagal terhubung"));
     });
+    // A dropped socket (server restart, network blip) used to leave the UI in
+    // the interview forever: mic on, captions frozen, "Akhiri" sending into a
+    // dead socket. Surface it so the page can exit cleanly.
+    ws.onclose = () => {
+      if (!this.closedByUs) this.onMessage({ type: "disconnected" });
+    };
     ws.onmessage = (ev) => {
       if (ev.data instanceof ArrayBuffer) {
         this.enqueue(ev.data);
@@ -213,7 +224,8 @@ export class VoiceClient {
   }
 
   end(): void {
-    this.ws?.send(JSON.stringify({ type: "end" }));
+    // sending into a CLOSING/CLOSED socket only spams console errors
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type: "end" }));
   }
 
   /** Mic toggle: a disabled track streams silence — STT stays connected, hears nothing. */
@@ -222,6 +234,7 @@ export class VoiceClient {
   }
 
   dispose(): void {
+    this.closedByUs = true;
     this.cleanupResume();
     cancelAnimationFrame(this.raf);
     this.flush();

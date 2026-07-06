@@ -277,6 +277,8 @@ export default function Game() {
   const [report, setReport] = useState<GameReport | null>(null);
   const sessionRef = useRef<string | null>(null);
   const clientRef = useRef<VoiceClient | null>(null);
+  /** Session reached a terminal state (report/denied/drop) — later closes are noise. */
+  const finishedRef = useRef(false);
   // stable ref for the avatar; swapped to the live client's ref on connect
   const aiLevelRef = useRef({ current: 0 });
   const stickRef = useRef<StickState>({ x: 0, z: 0 });
@@ -363,9 +365,21 @@ export default function Game() {
   const handleMessage = useCallback((msg: ServerMsg) => {
     if (msg.type === "denied") {
       // attempt cap hit — back to the menu with the server's explanation
+      finishedRef.current = true;
       clientRef.current?.dispose();
       clientRef.current = null;
       setError(msg.reason);
+      setPhase("lobby");
+      return;
+    }
+    if (msg.type === "disconnected") {
+      // socket dropped mid-interview (server restart, network). After a report
+      // or denial the server closing is expected — ignore it there.
+      if (finishedRef.current) return;
+      finishedRef.current = true;
+      clientRef.current?.dispose();
+      clientRef.current = null;
+      setError("Koneksi ke server terputus — sesi interview berakhir.");
       setPhase("lobby");
       return;
     }
@@ -375,6 +389,7 @@ export default function Game() {
     else if (msg.type === "scoring") setPhase("scoring");
     else if (msg.type === "report") {
       audio.sfx("success");
+      finishedRef.current = true;
       setReport(msg.report);
       setPhase("report");
       setCompleted((c) => {
@@ -389,6 +404,7 @@ export default function Game() {
     if (!session || clientRef.current) return;
     audio.sfx("sit");
     setConnecting(true);
+    finishedRef.current = false; // fresh connection — closes matter again
     const client = new VoiceClient();
     client.onMessage = handleMessage;
     clientRef.current = client;
