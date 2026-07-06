@@ -236,35 +236,38 @@ function Office({ dollhouse }: { dollhouse: boolean }) {
       )}
 
       {/* lobby shell (14×10, z 0..10); south + east walls face the helicopter camera */}
-      <Wall position={[-7, 1.5, 5]} size={[0.15, 3, 10.15]} />
+      <Wall position={[-7, 1.5, 5]} size={[0.15, 3, 10.15]} stub={dollhouse} />
       <Wall position={[7, 1.5, 5]} size={[0.15, 3, 10.15]} stub={dollhouse} />
       <Wall position={[0, 1.5, 10]} size={[14.15, 3, 0.15]} stub={dollhouse} />
 
       {/* interview room shell (9×7, z -7..0); east + front walls face the camera */}
-      <Wall position={[0, 1.5, -7]} size={[9.15, 3, 0.15]} />
-      <Wall position={[-4.5, 1.5, -3.5]} size={[0.15, 3, 7.15]} />
+      <Wall position={[0, 1.5, -7]} size={[9.15, 3, 0.15]} stub={dollhouse} />
+      <Wall position={[-4.5, 1.5, -3.5]} size={[0.15, 3, 7.15]} stub={dollhouse} />
       <Wall position={[4.5, 1.5, -3.5]} size={[0.15, 3, 7.15]} stub={dollhouse} />
       {/* front wall with a centered door gap (±1.2) */}
       <Wall position={[-4.1, 1.5, 0]} size={[5.8, 3, 0.15]} stub={dollhouse} />
       <Wall position={[4.1, 1.5, 0]} size={[5.8, 3, 0.15]} stub={dollhouse} />
       {!dollhouse && <Wall position={[0, 2.75, 0]} size={[2.4, 0.5, 0.15]} />}
 
-      {/* paintings: interview back wall + lobby west wall */}
-      <Painting x={-1.8} z={-6.92} rotY={0} color="#c9a84a" />
-      <Painting x={1.8} z={-6.92} rotY={0} color="#4a86c9" />
-      <Painting x={-6.92} z={1.5} rotY={Math.PI / 2} color="#c96f4a" />
-
-      {/* "daylight" windows on the west walls */}
-      {[3, 7].map((z) => (
-        <mesh key={z} position={[-6.92, 1.6, z]} rotation={[0, Math.PI / 2, 0]}>
-          <planeGeometry args={[2.6, 1.5]} />
-          <meshStandardMaterial color="#bcd6ef" emissive="#9fc4e8" emissiveIntensity={0.9} />
-        </mesh>
-      ))}
-      <mesh position={[-4.42, 1.6, -3.5]} rotation={[0, Math.PI / 2, 0]}>
-        <planeGeometry args={[2.6, 1.5]} />
-        <meshStandardMaterial color="#bcd6ef" emissive="#9fc4e8" emissiveIntensity={0.9} />
-      </mesh>
+      {/* wall decor lives on full-height walls only — orbiting camera means any
+          wall can be a stub in dollhouse view, so hide it all there */}
+      {!dollhouse && (
+        <>
+          <Painting x={-1.8} z={-6.92} rotY={0} color="#c9a84a" />
+          <Painting x={1.8} z={-6.92} rotY={0} color="#4a86c9" />
+          <Painting x={-6.92} z={1.5} rotY={Math.PI / 2} color="#c96f4a" />
+          {[3, 7].map((z) => (
+            <mesh key={z} position={[-6.92, 1.6, z]} rotation={[0, Math.PI / 2, 0]}>
+              <planeGeometry args={[2.6, 1.5]} />
+              <meshStandardMaterial color="#bcd6ef" emissive="#9fc4e8" emissiveIntensity={0.9} />
+            </mesh>
+          ))}
+          <mesh position={[-4.42, 1.6, -3.5]} rotation={[0, Math.PI / 2, 0]}>
+            <planeGeometry args={[2.6, 1.5]} />
+            <meshStandardMaterial color="#bcd6ef" emissive="#9fc4e8" emissiveIntensity={0.9} />
+          </mesh>
+        </>
+      )}
 
       {/* interview room furniture */}
       <Furn url={F.rug} position={[0, 0.006, -4.6]} />
@@ -377,6 +380,36 @@ function Player({
   const lookGoal = useMemo(() => new THREE.Vector3(), []);
   const look = useMemo(() => new THREE.Vector3(0, 1, SPAWN.z), []);
   const camera = useThree((s) => s.camera);
+  /** Helicopter-camera azimuth (drag to orbit) and distance (wheel to zoom). */
+  const yaw = useRef(Math.PI / 4);
+  const dist = useRef(6.5);
+
+  useEffect(() => {
+    let dragging = false;
+    const onDown = (e: MouseEvent) => {
+      if (e.button === 0 && e.target instanceof HTMLCanvasElement) dragging = true;
+    };
+    const onMove = (e: MouseEvent) => {
+      if (dragging) yaw.current -= e.movementX * 0.006;
+    };
+    const onUp = () => {
+      dragging = false;
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (e.target instanceof HTMLCanvasElement)
+        dist.current = Math.min(12, Math.max(4, dist.current + e.deltaY * 0.01));
+    };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("wheel", onWheel, { passive: true });
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("wheel", onWheel);
+    };
+  }, []);
 
   useEffect(() => {
     const typing = (e: KeyboardEvent) =>
@@ -414,10 +447,12 @@ function Player({
       const iz = (keys.current.down ? 1 : 0) - (keys.current.up ? 1 : 0);
       if (ix !== 0 || iz !== 0) {
         moving = true;
-        // input is screen-relative: rotate by the helicopter camera's 45° azimuth
-        // so W walks "up the screen", not up the world axis
-        const dx = (ix + iz) * Math.SQRT1_2;
-        const dz = (iz - ix) * Math.SQRT1_2;
+        // input is screen-relative: rotate by the camera azimuth so W always
+        // walks "up the screen", wherever the camera has been orbited to
+        const sy = Math.sin(yaw.current);
+        const cy = Math.cos(yaw.current);
+        const dx = ix * cy + iz * sy;
+        const dz = iz * cy - ix * sy;
         const len = Math.hypot(dx, dz);
         const stepX = (dx / len) * SPEED * dt;
         const stepZ = (dz / len) * SPEED * dt;
@@ -459,7 +494,8 @@ function Player({
       camGoal.set(1.35, 1.7, -2.05);
       lookGoal.set(-0.12, 0.9, -5.8);
     } else {
-      camGoal.set(p.x + 4.6, 7.6, p.z + 4.6);
+      const d = dist.current;
+      camGoal.set(p.x + Math.sin(yaw.current) * d, d * 1.17, p.z + Math.cos(yaw.current) * d);
       lookGoal.set(p.x, 0.6, p.z);
     }
     const k = 1 - Math.exp(-6 * dt);

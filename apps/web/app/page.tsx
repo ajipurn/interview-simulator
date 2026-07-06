@@ -151,7 +151,7 @@ export default function Game() {
                 ? "Menyalakan mikrofon…"
                 : nearChair
                   ? "Tekan E untuk duduk dan mulai interview"
-                  : "WASD / panah untuk jalan — masuk ke ruang interview"}
+                  : "WASD jalan · drag mouse putar kamera · scroll zoom"}
             </div>
           )}
           {phase === "interview" && (
