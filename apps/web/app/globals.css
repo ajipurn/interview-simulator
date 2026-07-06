@@ -368,6 +368,61 @@ button:disabled {
   background: #7d4040;
 }
 
+/* --- mic meter + lobby mic test --- */
+
+.vu {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.vu-bar {
+  width: 4px;
+  background: #2a3242;
+}
+
+.vu-bar.lit {
+  background: #6ad08a;
+}
+
+.vu-bar.lit:nth-child(5) {
+  background: #e8c34a;
+}
+
+.vu.vu-off .vu-bar {
+  background: #1c2230;
+}
+
+.mictest-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.mictest-live {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 11px 14px;
+  background: #0e1218;
+  border: 1px solid #2a3242;
+  border-radius: 10px;
+  font-size: 17px;
+  color: #9aa3b2;
+}
+
+.mictest-live.ok {
+  border-color: #3f8f5e;
+  color: #8fd6a4;
+}
+
+.mictest-live .vu-bar {
+  width: 6px;
+}
+
 /* --- touch controls --- */
 
 .joystick {

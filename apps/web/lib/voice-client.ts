@@ -69,7 +69,8 @@ function toPcm16k(input: Float32Array, inRate: number): Int16Array {
   return out;
 }
 
-function rms(analyser: AnalyserNode, buf: Uint8Array<ArrayBuffer>): number {
+/** 0..1 loudness from a time-domain analyser — shared by the HUD meters. */
+export function rms(analyser: AnalyserNode, buf: Uint8Array<ArrayBuffer>): number {
   analyser.getByteTimeDomainData(buf);
   let sum = 0;
   for (const v of buf) {

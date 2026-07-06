@@ -4,7 +4,7 @@ import { Canvas } from "@react-three/fiber";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { type GamePhase, SEATS, Scene, type StickState } from "../components/scene";
 import * as audio from "../lib/audio";
-import { type GameReport, type ServerMsg, VoiceClient } from "../lib/voice-client";
+import { type GameReport, rms, type ServerMsg, VoiceClient } from "../lib/voice-client";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:4001";
@@ -135,6 +135,92 @@ function Joystick({ stick }: { stick: { current: StickState } }) {
       onPointerCancel={release}
     >
       <div className="thumb" style={{ transform: `translate(${thumb.x}px, ${thumb.y}px)` }} />
+    </div>
+  );
+}
+
+/**
+ * Retro VU meter driven by a rAF-updated 0..1 level ref. Writes classes on the
+ * bars directly each frame — no React re-render at 60fps.
+ */
+function MicMeter({ level, active = true }: { level: { current: number }; active?: boolean }) {
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let raf = 0;
+    const loop = () => {
+      const el = root.current;
+      if (el) {
+        const lit = active ? Math.min(5, Math.round(Math.min(1, level.current * 1.5) * 6)) : 0;
+        el.childNodes.forEach((b, i) => {
+          (b as HTMLElement).classList.toggle("lit", i < lit);
+        });
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    loop();
+    return () => cancelAnimationFrame(raf);
+  }, [level, active]);
+  return (
+    <div ref={root} className={`vu${active ? "" : " vu-off"}`} aria-hidden>
+      {[0, 1, 2, 3, 4].map((i) => (
+        <div key={i} className="vu-bar" style={{ height: 5 + i * 2.5 }} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Lobby mic check: ask permission, meter the live input, confirm once speech is
+ * heard. Also warms the permission so sitting down later starts instantly.
+ */
+function MicTest() {
+  const [state, setState] = useState<"idle" | "testing" | "ok" | "denied">("idle");
+  const level = useRef(0); // the ref object itself is the {current} the meter reads
+  const stop = useRef<() => void>(() => {});
+  useEffect(() => () => stop.current(), []);
+
+  const start = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true },
+      });
+      const ctx = new AudioContext();
+      const src = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      src.connect(analyser);
+      const buf = new Uint8Array(analyser.frequencyBinCount);
+      let raf = 0;
+      const loop = () => {
+        level.current = rms(analyser, buf);
+        // one-way latch: enough signal = the mic definitely works
+        if (level.current > 0.28) setState("ok");
+        raf = requestAnimationFrame(loop);
+      };
+      setState("testing");
+      loop();
+      stop.current = () => {
+        cancelAnimationFrame(raf);
+        for (const t of stream.getTracks()) t.stop();
+        void ctx.close().catch(() => {});
+      };
+    } catch {
+      setState("denied");
+    }
+  };
+
+  if (state === "idle")
+    return (
+      <button type="button" className="ghost mictest-btn" onClick={() => void start()}>
+        <IconMicOn /> Tes mic dulu
+      </button>
+    );
+  if (state === "denied")
+    return <p className="error">Izin mikrofon ditolak — cek izin browser lalu muat ulang halaman.</p>;
+  return (
+    <div className={`mictest-live${state === "ok" ? " ok" : ""}`}>
+      <MicMeter level={level} />
+      <span>{state === "ok" ? "Mic OK — suaramu kedengeran!" : "Ngomong sesuatu…"}</span>
     </div>
   );
 }
@@ -421,10 +507,11 @@ export default function Game() {
           <div className="card lobby">
             <h1>Interview Simulator</h1>
             <ProfilePlate profile={profile} completed={completed} onEdit={() => setEditing(true)} />
-            <p className="sub" style={{ marginTop: 16 }}>
-              Jalan ke ruang interview (WASD), duduk (E), dan selamat berjuang!.
-            </p>
-            <button type="button" onClick={() => void start()} disabled={busy}>
+            {/* <p className="sub" style={{ marginTop: 16 }}>
+              Selamat datang di kantor PT Mencari Cuan Sejati. Jalan ke ruang interview (WASD), duduk (E), dan selamat berjuang!.
+            </p> */}
+            <MicTest />
+            <button type="button" onClick={() => void start()} disabled={busy} style={{ marginTop: 16 }}>
               {busy ? "Menyiapkan ruangan…" : "▶ Masuk ke kantor"}
             </button>
             {error && <p className="error">{error}</p>}
@@ -498,6 +585,7 @@ export default function Game() {
                 >
                   {micOn ? <IconMicOn /> : <IconMicOff />}
                 </button>
+                {clientRef.current && <MicMeter level={clientRef.current.micLevel} active={micOn} />}
                 <span className="live">● live</span>
                 {progress.total > 0 && (
                   <span>
