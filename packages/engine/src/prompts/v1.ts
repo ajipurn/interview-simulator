@@ -204,6 +204,14 @@ Aturan KERAS:
 
 // --- Deterministic templates (no LLM involved) ---
 
+// ponytail: server-local hour. Pass an explicit hour if per-candidate TZ matters.
+function timeGreeting(hour = new Date().getHours()): string {
+  if (hour >= 4 && hour < 11) return "Selamat pagi";
+  if (hour >= 11 && hour < 15) return "Selamat siang";
+  if (hour >= 15 && hour < 18) return "Selamat sore";
+  return "Selamat malam";
+}
+
 export function openingScript(
   candidateName: string,
   jobTitle: string,
@@ -214,11 +222,11 @@ export function openingScript(
   // clear cue to start. Topic count deliberately unspoken — nobody opens a
   // real interview with "we will cover 3 topics".
   return (
-    `Halo ${candidateName}, akhirnya ketemu juga! Sini, duduk santai aja ya. ` +
-    `Aku Selia, hari ini aku yang nemenin kamu ngobrol soal posisi ${jobTitle}. ` +
+    `${timeGreeting()} ${candidateName}. ` +
+    `Perkenalkan aku Selia, hari ini aku yang nemenin kamu ngobrol soal posisi ${jobTitle}. ` +
     `Anggap ini ngobrol biasa, bukan ujian — nggak ada jawaban benar atau salah, aku cuma pengin dengar ceritamu langsung. ` +
     `Kurang lebih ${durationMin} menit, dan di akhir gantian, kamu bebas tanya apa pun ke aku. ` +
-    `Oke, tarik napas dulu boleh... kalau sudah siap, bilang aja.`
+    `Oke... kalau sudah siap, bilang aja.`
   );
 }
 
@@ -226,7 +234,7 @@ export const CANDIDATE_QUESTIONS_TRANSITION =
   "Nah, itu tadi semua pertanyaan dari aku. Sekarang gantian — ada yang mau kamu tanyakan soal posisi atau prosesnya?";
 
 export const CLOSING_SCRIPT =
-  "Terima kasih banyak sudah meluangkan waktu ngobrol sama aku hari ini. Jawabanmu sudah terekam dengan baik. Tim rekruter akan meninjau hasilnya, dan kamu akan menerima kabar serta feedback via WhatsApp. Semoga harimu menyenangkan ya!";
+  "Terima kasih banyak sudah meluangkan waktu ngobrol sama aku hari ini. Jawabanmu sudah terekam dengan baik. Tim rekruter akan meninjau hasilnya. Semoga harimu menyenangkan ya!";
 
 export const RESUME_SCRIPT =
   "Selamat datang kembali! Tidak apa-apa, koneksi memang kadang bermasalah. Kita lanjut dari topik terakhir ya.";

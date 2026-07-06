@@ -211,38 +211,102 @@ function CeilingLamp({ x, z, showFixture }: { x: number; z: number; showFixture:
   );
 }
 
-/** Where the clickable wall poster points. Swap the texture by editing makePosterTexture. */
-const POSTER_URL = "https://kenney.nl";
+const POSTER_URL = "https://aji.is-a.dev";
+const FIDA_URL = "https://fida.my.id";
 
-function makePosterTexture(): THREE.CanvasTexture {
+/** Portfolio hero: black, "HI, I AM", huge name, roles at the bottom. */
+function makeAjiPoster(): THREE.CanvasTexture {
   const c = document.createElement("canvas");
-  c.width = 512;
-  c.height = 340;
+  c.width = 1024;
+  c.height = 512;
   const g = c.getContext("2d");
   if (g) {
-    g.fillStyle = "#171c26";
-    g.fillRect(0, 0, 512, 340);
-    g.strokeStyle = "#4a86c9";
-    g.lineWidth = 14;
-    g.strokeRect(7, 7, 498, 326);
-    g.fillStyle = "#e8e6e1";
-    g.font = "bold 44px monospace";
+    g.fillStyle = "#0c0c0c";
+    g.fillRect(0, 0, 1024, 512);
+    g.textAlign = "left";
+    // eyebrow
+    g.fillStyle = "#8a8a8a";
+    g.font = "26px monospace";
+    g.fillText("H I ,   I   A M", 58, 78);
+    // name — two heavy lines
+    g.fillStyle = "#f2f2f2";
+    g.font = "900 150px Helvetica, Arial, sans-serif";
+    g.fillText("AJI", 52, 218);
+    g.font = "900 122px Helvetica, Arial, sans-serif";
+    g.fillText("PURNOMO", 52, 352);
+    // roles — 22px fits inside 1024 with the letter spacing
+    g.fillStyle = "#d9c9a0";
+    g.font = "22px monospace";
+    g.fillText("A I   E N G I N E E R", 58, 458);
+    const w = g.measureText("A I   E N G I N E E R").width;
+    g.fillStyle = "#8a8a8a";
+    g.fillText("/   F R O N T E N D   D E V E L O P E R", 58 + w + 28, 458);
+  }
+  return new THREE.CanvasTexture(c);
+}
+
+/** Fida hero: dark navy, badge pill, serif headline, redaction terminal chip. */
+function makeFidaPoster(): THREE.CanvasTexture {
+  const c = document.createElement("canvas");
+  c.width = 1024;
+  c.height = 512;
+  const g = c.getContext("2d");
+  if (g) {
+    const bg = g.createLinearGradient(0, 0, 0, 512);
+    bg.addColorStop(0, "#0c1826");
+    bg.addColorStop(1, "#091019");
+    g.fillStyle = bg;
+    g.fillRect(0, 0, 1024, 512);
     g.textAlign = "center";
-    g.fillText("INTERVIEW", 256, 110);
-    g.fillText("SIMULATOR", 256, 160);
-    g.fillStyle = "#7fb0e8";
-    g.font = "28px monospace";
-    g.fillText("assets: kenney.nl", 256, 230);
-    g.fillStyle = "#6ad08a";
+    // badge pill
+    g.strokeStyle = "#2a4a66";
+    g.lineWidth = 2;
+    g.beginPath();
+    g.roundRect(272, 34, 480, 44, 22);
+    g.stroke();
+    g.fillStyle = "#7fc4ef";
+    g.font = "21px monospace";
+    g.fillText("LOCAL-FIRST · AGENT-AGNOSTIC", 512, 63);
+    // headline
+    g.fillStyle = "#eef2f5";
+    g.font = "bold 58px Georgia, serif";
+    g.fillText("Let agents read your code,", 512, 175);
+    g.fillStyle = "#3aa8e8";
+    g.font = "bold 64px Georgia, serif";
+    g.fillText("not your secrets.", 512, 255);
+    // sub
+    g.fillStyle = "#9fb0c0";
     g.font = "24px monospace";
-    g.fillText("[ klik untuk buka ]", 256, 290);
+    g.fillText("Secret values are redacted", 512, 330);
+    g.fillText("before reaching the model.", 512, 362);
+    // terminal chip
+    g.fillStyle = "#0e1a28";
+    g.strokeStyle = "#24384e";
+    g.beginPath();
+    g.roundRect(212, 402, 600, 72, 10);
+    g.fill();
+    g.stroke();
+    g.textAlign = "left";
+    g.fillStyle = "#d7e3ee";
+    g.font = "22px monospace";
+    g.fillText("$ fida_read .env", 240, 432);
+    g.fillStyle = "#57c78a";
+    g.fillText("DEMO_CREDENTIAL=•••••••••  ✓ redacted", 240, 462);
   }
   return new THREE.CanvasTexture(c);
 }
 
 /** Wall art that opens a URL when clicked; glows + cursor on hover. */
-function Poster({ position, url }: { position: [number, number, number]; url: string }) {
-  const tex = useMemo(makePosterTexture, []);
+function Poster({
+  position,
+  url,
+  make,
+}: {
+  position: [number, number, number];
+  url: string;
+  make: () => THREE.CanvasTexture;
+}) {
+  const tex = useMemo(make, [make]);
   const [hover, setHover] = useState(false);
   useEffect(() => {
     document.body.style.cursor = hover ? "pointer" : "auto";
@@ -261,7 +325,7 @@ function Poster({ position, url }: { position: [number, number, number]; url: st
       onPointerOver={() => setHover(true)}
       onPointerOut={() => setHover(false)}
     >
-      <planeGeometry args={[1.5, 1.0]} />
+      <planeGeometry args={[2.0, 1.0]} />
       <meshStandardMaterial
         map={tex}
         emissive={hover ? "#3a4b66" : "#000000"}
@@ -319,8 +383,8 @@ function Office({ dollhouse }: { dollhouse: boolean }) {
           wall can be a stub in dollhouse view, so hide it all there */}
       {!dollhouse && (
         <>
-          <Painting x={-1.8} z={-6.92} rotY={0} color="#c9a84a" />
-          <Poster position={[1.8, 1.7, -6.91]} url={POSTER_URL} />
+          <Poster position={[-1.8, 1.7, -6.91]} url={FIDA_URL} make={makeFidaPoster} />
+          <Poster position={[1.8, 1.7, -6.91]} url={POSTER_URL} make={makeAjiPoster} />
           <Painting x={-6.92} z={1.5} rotY={Math.PI / 2} color="#c96f4a" />
           {[3, 7].map((z) => (
             <mesh key={z} position={[-6.92, 1.6, z]} rotation={[0, Math.PI / 2, 0]}>
