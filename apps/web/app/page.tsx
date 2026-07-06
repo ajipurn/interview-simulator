@@ -37,18 +37,14 @@ function PxIcon({ cells, accent = [] }: { cells: Cell[]; accent?: Cell[] }) {
   );
 }
 
-const SPEAKER: Cell[] = [
-  [1, 4, 2, 4],
-  [3, 3, 1, 6],
-  [4, 2, 1, 8],
+/** Beamed eighth notes (♫) — the button toggles music + SFX. */
+const NOTE: Cell[] = [
+  [3, 2, 6, 2], // beam
+  [3, 4, 1, 4], // stems
+  [8, 4, 1, 4],
+  [1, 8, 3, 2], // note heads
+  [6, 8, 3, 2],
 ];
-const SPEAKER_WAVES: Cell[] = [
-  [6, 5, 1, 2],
-  [8, 3, 1, 1],
-  [9, 4, 1, 4],
-  [8, 8, 1, 1],
-];
-const SPEAKER_X: Cell[] = [[7, 4], [9, 4], [8, 5], [7, 6], [9, 6]];
 const MIC: Cell[] = [
   [5, 1, 2, 6],
   [3, 4, 1, 3],
@@ -86,8 +82,8 @@ const PENCIL: Cell[] = [
   [9, 3],
 ];
 
-const IconSpeakerOn = () => <PxIcon cells={[...SPEAKER, ...SPEAKER_WAVES]} />;
-const IconSpeakerOff = () => <PxIcon cells={SPEAKER} accent={SPEAKER_X} />;
+const IconMusicOn = () => <PxIcon cells={NOTE} />;
+const IconMusicOff = () => <PxIcon cells={NOTE} accent={SLASH} />;
 const IconMicOn = () => <PxIcon cells={MIC} />;
 const IconMicOff = () => <PxIcon cells={MIC} accent={SLASH} />;
 const IconPencil = () => <PxIcon cells={PENCIL} />;
@@ -562,7 +558,7 @@ export default function Game() {
               setMutedUi(!mutedUi);
             }}
           >
-            {mutedUi ? <IconSpeakerOff /> : <IconSpeakerOn />}
+            {mutedUi ? <IconMusicOff /> : <IconMusicOn />}
           </button>
           {phase === "explore" && !reading && (
             <div className="hint">
