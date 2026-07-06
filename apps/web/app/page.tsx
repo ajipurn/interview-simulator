@@ -8,15 +8,58 @@ import { type GameReport, type ServerMsg, VoiceClient } from "../lib/voice-clien
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:4001";
 
+const PROFILE_KEY = "sim.profile";
+const COMPLETED_KEY = "sim.completed";
+
+interface Profile {
+  name: string;
+  role: string;
+}
+
 interface Caption {
   speaker: "ai" | "candidate";
   text: string;
 }
 
+/** RPG-style nameplate: avatar, name, class (role), level + XP bar. */
+function ProfilePlate({
+  profile,
+  completed,
+  onEdit,
+}: {
+  profile: Profile;
+  completed: number;
+  onEdit?: () => void;
+}) {
+  return (
+    <div className="plate">
+      <div className="avatar">{profile.name.trim()[0]?.toUpperCase() ?? "?"}</div>
+      <div className="plate-info">
+        <span className="plate-name">{profile.name}</span>
+        <span className="plate-role">{profile.role}</span>
+        {/* ponytail: level = interviews finished; XP bar is cosmetic (5 per "ring") */}
+        <div className="xp">
+          <div className="xp-fill" style={{ width: `${(completed % 5) * 20}%` }} />
+        </div>
+      </div>
+      <span className="lv">LV {completed + 1}</span>
+      {onEdit && (
+        <button type="button" className="edit" onClick={onEdit} title="Edit karakter">
+          ✎
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function Game() {
   const [phase, setPhase] = useState<GamePhase>("lobby");
-  const [jobTitle, setJobTitle] = useState("");
-  const [name, setName] = useState("");
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [completed, setCompleted] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draftName, setDraftName] = useState("");
+  const [draftRole, setDraftRole] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [nearChair, setNearChair] = useState(false);
@@ -31,15 +74,40 @@ export default function Game() {
 
   useEffect(() => () => clientRef.current?.dispose(), []);
 
-  const start = async (e: React.FormEvent) => {
+  // character is created once and persisted; the form comes back only via Edit
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PROFILE_KEY);
+      if (raw) {
+        const p = JSON.parse(raw) as Profile;
+        setProfile(p);
+        setDraftName(p.name);
+        setDraftRole(p.role);
+      }
+      setCompleted(Number(localStorage.getItem(COMPLETED_KEY) ?? 0) || 0);
+    } catch {
+      // corrupt storage → treat as first run
+    }
+    setLoaded(true);
+  }, []);
+
+  const saveProfile = (e: React.FormEvent) => {
     e.preventDefault();
+    const p: Profile = { name: draftName.trim(), role: draftRole.trim() };
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
+    setProfile(p);
+    setEditing(false);
+  };
+
+  const start = async () => {
+    if (!profile) return;
     setBusy(true);
     setError("");
     try {
       const res = await fetch(`${API_URL}/session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobTitle, candidateName: name }),
+        body: JSON.stringify({ jobTitle: profile.role, candidateName: profile.name }),
       });
       if (!res.ok) throw new Error(`server ${res.status}: ${await res.text()}`);
       const data = (await res.json()) as { sessionId: string };
@@ -55,12 +123,15 @@ export default function Game() {
   const handleMessage = useCallback((msg: ServerMsg) => {
     if (msg.type === "caption")
       setCaptions((prev) => [...prev.slice(-3), { speaker: msg.speaker, text: msg.text }]);
-    else if (msg.type === "progress")
-      setProgress({ current: msg.current, total: msg.total });
+    else if (msg.type === "progress") setProgress({ current: msg.current, total: msg.total });
     else if (msg.type === "scoring") setPhase("scoring");
     else if (msg.type === "report") {
       setReport(msg.report);
       setPhase("report");
+      setCompleted((c) => {
+        localStorage.setItem(COMPLETED_KEY, String(c + 1));
+        return c + 1;
+      });
     }
   }, []);
 
@@ -99,6 +170,9 @@ export default function Game() {
     return () => window.removeEventListener("keydown", onKey);
   }, [phase, nearChair, connecting, sit]);
 
+  const showForm = loaded && (editing || !profile);
+  const showMenu = loaded && !editing && !!profile;
+
   return (
     <div className="game">
       <Canvas shadows dpr={[1, 2]} camera={{ fov: 60, position: [0, 2.4, 12] }}>
@@ -107,19 +181,20 @@ export default function Game() {
         </Suspense>
       </Canvas>
 
-      {phase === "lobby" && (
+      {phase === "lobby" && showForm && (
         <div className="overlay">
-          <form className="card lobby" onSubmit={start}>
-            <h1>Interview Simulator</h1>
+          <form className="card lobby" onSubmit={saveProfile}>
+            <h1>{profile ? "Edit Karakter" : "Interview Simulator"}</h1>
             <p className="sub">
-              Masukkan posisi yang kamu lamar, jalan ke ruang interview (WASD / panah), duduk, dan
-              jawab dengan suaramu — seperti wawancara sungguhan.
+              {profile
+                ? "Ubah nama atau posisi yang kamu lamar."
+                : "Buat karaktermu sekali — nanti tinggal masuk kantor, jalan ke ruang interview, duduk, dan jawab dengan suaramu."}
             </p>
             <label>
               Nama panggilan
               <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
                 placeholder="Budi"
                 maxLength={60}
                 required
@@ -128,23 +203,43 @@ export default function Game() {
             <label>
               Posisi yang dilamar
               <input
-                value={jobTitle}
-                onChange={(e) => setJobTitle(e.target.value)}
+                value={draftRole}
+                onChange={(e) => setDraftRole(e.target.value)}
                 placeholder="Frontend Engineer"
                 maxLength={80}
                 required
               />
             </label>
-            <button type="submit" disabled={busy}>
-              {busy ? "Menyiapkan ruangan…" : "Masuk ke kantor"}
-            </button>
-            {error && <p className="error">{error}</p>}
+            <button type="submit">Simpan karakter</button>
+            {profile && (
+              <button type="button" className="ghost" onClick={() => setEditing(false)}>
+                Batal
+              </button>
+            )}
           </form>
         </div>
       )}
 
-      {(phase === "explore" || phase === "interview") && (
+      {phase === "lobby" && showMenu && profile && (
+        <div className="overlay">
+          <div className="card lobby">
+            <h1>Interview Simulator</h1>
+            <ProfilePlate profile={profile} completed={completed} onEdit={() => setEditing(true)} />
+            <p className="sub" style={{ marginTop: 16 }}>
+              Jalan ke ruang interview (WASD), duduk (E), dan jawab dengan suaramu — seperti
+              wawancara sungguhan.
+            </p>
+            <button type="button" onClick={() => void start()} disabled={busy}>
+              {busy ? "Menyiapkan ruangan…" : "▶ Masuk ke kantor"}
+            </button>
+            {error && <p className="error">{error}</p>}
+          </div>
+        </div>
+      )}
+
+      {phase !== "lobby" && profile && (
         <div className="hud">
+          <ProfilePlate profile={profile} completed={completed} />
           {phase === "explore" && (
             <div className="hint">
               {connecting
@@ -232,7 +327,7 @@ export default function Game() {
             )}
             {report.tips && <p className="tips">💡 {report.tips}</p>}
             <button type="button" onClick={() => window.location.reload()}>
-              Main lagi
+              Main lagi (LV {completed + 1})
             </button>
           </div>
         </div>

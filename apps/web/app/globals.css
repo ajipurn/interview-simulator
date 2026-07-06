@@ -152,10 +152,12 @@ button:disabled {
 }
 
 .topbar {
+  position: absolute;
+  top: 14px;
+  right: 16px;
   display: flex;
   align-items: center;
   gap: 16px;
-  margin: 14px 16px 0;
   padding: 10px 14px;
   background: rgba(14, 18, 24, 0.72);
   border: 1px solid #2a3242;
@@ -182,7 +184,8 @@ button:disabled {
 }
 
 .captions {
-  margin: 0 auto 26px;
+  /* auto top margin pins captions to the bottom (plate/topbar are absolute) */
+  margin: auto auto 26px;
   width: min(700px, calc(100% - 32px));
   display: flex;
   flex-direction: column;
@@ -216,6 +219,105 @@ button:disabled {
   padding: 10px 16px;
   border-radius: 10px;
   pointer-events: auto;
+}
+
+/* --- RPG nameplate --- */
+
+.plate {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 8px;
+  background: rgba(14, 18, 24, 0.85);
+  border: 2px solid #2a3242;
+  border-radius: 10px;
+  box-shadow: 0 0 0 2px #0e1218, 0 6px 18px rgba(0, 0, 0, 0.4);
+  width: fit-content;
+  pointer-events: auto;
+}
+
+.hud .plate {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+}
+
+.avatar {
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display), monospace;
+  font-size: 18px;
+  color: #fff;
+  background: linear-gradient(135deg, #4a86c9, #6ad08a);
+  border: 2px solid #0e1218;
+  border-radius: 8px;
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+.plate-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 120px;
+}
+
+.plate-name {
+  font-family: var(--font-display), monospace;
+  font-size: 10px;
+}
+
+.plate-role {
+  font-size: 16px;
+  color: #9fb4d4;
+  line-height: 1;
+}
+
+.xp {
+  height: 5px;
+  border-radius: 3px;
+  background: #0e1218;
+  overflow: hidden;
+}
+
+.xp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #e8c34a, #6ad08a);
+}
+
+.lv {
+  font-family: var(--font-display), monospace;
+  font-size: 9px;
+  color: #e8c34a;
+  background: #241f10;
+  border: 1px solid #5c4d1e;
+  padding: 5px 7px;
+  border-radius: 6px;
+}
+
+.edit {
+  width: auto;
+  padding: 6px 9px;
+  font-size: 14px;
+  font-family: var(--font-body), monospace;
+  background: #2a3242;
+}
+
+.edit:hover {
+  background: #39455c;
+}
+
+.ghost {
+  background: transparent;
+  border: 1px solid #2a3242;
+  color: #9aa3b2;
+  margin-top: 10px;
+}
+
+.ghost:hover {
+  background: #1c2433;
 }
 
 /* --- report --- */
