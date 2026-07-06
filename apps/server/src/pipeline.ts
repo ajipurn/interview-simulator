@@ -304,6 +304,12 @@ export class VoicePipeline {
   /**
    * Speak a scripted line (greeting, resume) through the same abort/clear path
    * as replies — a second writer interleaving PCM into the sink garbles audio.
+   *
+   * Synthesized sentence-by-sentence with one-sentence lookahead: non-streaming
+   * TTS providers (Google Cloud) return audio only after synthesizing the whole
+   * input, so a long greeting in one call meant 10-15s of dead silence before
+   * the first byte — long enough that players talked over it and barged the
+   * greeting away before ever hearing it.
    */
   async say(text: string): Promise<void> {
     this.cancelResume();
@@ -312,17 +318,34 @@ export class VoicePipeline {
     this.current = ac;
     this.speakingText = text;
     this.noteAiSpeech(text);
+    const parts = text.split(/(?<=[.!?…])\s+/).filter((s) => s.trim());
+    const prepare = (sentence: string) => {
+      const iter = this.deps.tts
+        .synthesize(sentence, { signal: ac.signal })
+        [Symbol.asyncIterator]();
+      return { iter, first: iter.next() };
+    };
     try {
       let first = true;
-      for await (const chunk of this.deps.tts.synthesize(text, { signal: ac.signal })) {
-        if (ac.signal.aborted) return;
-        // show the caption exactly when its first audio is ready, never before —
-        // the greeting has no filler to hide the synth TTFB
-        if (first) {
-          this.deps.events?.onCaption?.("ai", text);
-          first = false;
+      let idx = 0;
+      let cur = parts.length > 0 ? prepare(parts[idx] ?? "") : null;
+      while (cur) {
+        idx++;
+        // kick off the next sentence's synthesis while this one plays
+        const next = idx < parts.length ? prepare(parts[idx] ?? "") : null;
+        let res = await cur.first;
+        while (!res.done) {
+          if (ac.signal.aborted) return;
+          // show the caption exactly when its first audio is ready, never before —
+          // the greeting has no filler to hide the synth TTFB
+          if (first) {
+            this.deps.events?.onCaption?.("ai", text);
+            first = false;
+          }
+          this.writeChunk(res.value);
+          res = await cur.iter.next();
         }
-        this.writeChunk(chunk);
+        cur = next;
       }
     } catch (err) {
       if (!ac.signal.aborted) throw err;

@@ -125,7 +125,17 @@ const server = createServer((req, res) => {
       if (!s.report) return sendJson(res, 425, { error: "not scored yet", status: s.status });
       return sendJson(res, 200, s.report);
     }
-    if (url.pathname === "/health") return sendJson(res, 200, { ok: true, sessions: sessions.size });
+    if (url.pathname === "/health")
+      return sendJson(res, 200, {
+        ok: true,
+        sessions: sessions.size,
+        // which providers this process actually resolved — mock TTS sounds like a sine buzz
+        providers: {
+          stt: process.env.STT_PROVIDER ?? "mock",
+          llm: process.env.LLM_PROVIDER ?? "mock",
+          tts: process.env.TTS_PROVIDER ?? "mock",
+        },
+      });
     sendJson(res, 404, { error: "not found" });
   })().catch((err) => {
     console.error(JSON.stringify({ evt: "http_error", err: String(err) }));
