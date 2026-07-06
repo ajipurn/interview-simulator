@@ -224,9 +224,9 @@ export function openingScript(
   return (
     `${timeGreeting()} ${candidateName}. ` +
     `Perkenalkan aku Selia, hari ini aku yang nemenin kamu ngobrol soal posisi ${jobTitle}. ` +
-    `Anggap ini ngobrol biasa, bukan ujian — nggak ada jawaban benar atau salah, aku cuma pengin dengar ceritamu langsung. ` +
-    `Kurang lebih ${durationMin} menit, dan di akhir gantian, kamu bebas tanya apa pun ke aku. ` +
-    `Oke... kalau sudah siap, bilang aja.`
+    `Anggap aja ini ngobrol biasa ya bukan ujian — nggak ada jawaban benar atau salah kok. ` +
+    `Kurang lebih ${durationMin} menit, dan di akhir, gantian kamu bebas tanya apa pun ke aku. ` +
+    `Siap?`
   );
 }
 

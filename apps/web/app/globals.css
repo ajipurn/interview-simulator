@@ -454,6 +454,188 @@ button:disabled {
   .card h1 {
     font-size: 15px;
   }
+
+  .np-cols {
+    columns: 1;
+  }
+
+  .np-head {
+    font-size: 24px;
+  }
+}
+
+/* --- newspaper (koran) --- */
+
+.paper-zone {
+  z-index: 5;
+  animation: fade-in 0.25s ease-out both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* classic movie transition: the front page spins in from a dot, overshoots, settles */
+.newspaper {
+  position: relative;
+  width: min(720px, 100%);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: #efe6cd;
+  color: #211d14;
+  padding: 22px 28px 18px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65);
+  animation: paper-spin 0.85s cubic-bezier(0.22, 1, 0.36, 1) both;
+  font-size: 19px;
+  line-height: 1.3;
+}
+
+@keyframes paper-spin {
+  0% {
+    transform: scale(0.03) rotate(-1440deg);
+    opacity: 0.4;
+  }
+  70% {
+    transform: scale(1.04) rotate(6deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .newspaper {
+    animation: fade-in 0.2s ease-out both;
+  }
+}
+
+.np-top {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: #4a4436;
+}
+
+.np-mast {
+  margin: 6px 0;
+  text-align: center;
+  font-family: var(--font-display), monospace;
+  font-size: 26px;
+  letter-spacing: 2px;
+  color: #211d14;
+}
+
+.np-motto {
+  margin: 0 0 14px;
+  padding: 4px 0 6px;
+  text-align: center;
+  font-size: 15px;
+  color: #4a4436;
+  border-top: 2px solid #211d14;
+  border-bottom: 4px double #211d14;
+}
+
+.np-head {
+  margin: 0 0 6px;
+  text-align: center;
+  font-size: 32px;
+  line-height: 1.05;
+  color: #211d14;
+}
+
+.np-deck {
+  margin: 0 0 14px;
+  text-align: center;
+  font-style: italic;
+  font-size: 17px;
+  color: #4a4436;
+  border-bottom: 1px solid #b6ab8d;
+  padding-bottom: 10px;
+}
+
+.np-cols {
+  columns: 2;
+  column-gap: 26px;
+  column-rule: 1px solid #b6ab8d;
+  text-align: justify;
+}
+
+.np-cols p {
+  margin: 0 0 12px;
+}
+
+.np-facts {
+  break-inside: avoid;
+  margin: 4px 0 12px;
+  padding: 10px 12px;
+  border: 2px solid #211d14;
+  background: #e6dabb;
+  font-size: 17px;
+}
+
+.np-facts h3 {
+  margin: 0 0 6px;
+  font-family: var(--font-display), monospace;
+  font-size: 9px;
+  color: #211d14;
+}
+
+.np-facts ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 16px;
+  color: #211d14;
+}
+
+.newspaper a {
+  color: #7a2c1e;
+}
+
+.np-foot {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 2px solid #211d14;
+  text-align: center;
+  font-size: 15px;
+  color: #4a4436;
+}
+
+.paper-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: auto;
+  padding: 6px 10px;
+  border-radius: 0;
+  background: #211d14;
+  color: #efe6cd;
+  font-size: 10px;
+}
+
+.paper-close:hover {
+  background: #4a4436;
+}
+
+/* second touch button, stacked above "Duduk/Berdiri" */
+.read-btn {
+  position: absolute;
+  right: 18px;
+  bottom: 116px;
+  width: auto;
+  padding: 18px 22px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: #8a6d3b;
+  pointer-events: auto;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+}
+
+.read-btn:hover {
+  background: #a1824a;
 }
 
 /* --- report --- */

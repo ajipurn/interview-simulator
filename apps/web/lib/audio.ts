@@ -125,7 +125,28 @@ function blip(
   o.stop(at + dur + 0.02);
 }
 
-export type SfxName = "click" | "sit" | "success";
+/** Filtered white-noise whoosh — the paper-spin transition sound. */
+function whoosh(c: AudioContext, out: GainNode, at: number, dur: number): void {
+  const buf = c.createBuffer(1, Math.ceil(c.sampleRate * dur), c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const bp = c.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.Q.value = 0.9;
+  bp.frequency.setValueAtTime(2800, at);
+  bp.frequency.exponentialRampToValueAtTime(500, at + dur);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0, at);
+  g.gain.linearRampToValueAtTime(0.3, at + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.001, at + dur);
+  src.connect(bp).connect(g).connect(out);
+  src.start(at);
+  src.stop(at + dur + 0.02);
+}
+
+export type SfxName = "click" | "sit" | "success" | "paper";
 
 export function sfx(name: SfxName): void {
   const c = ensure();
@@ -134,6 +155,9 @@ export function sfx(name: SfxName): void {
   switch (name) {
     case "click":
       blip(c, sfxGain, "square", 880, t, 0.07, 0.12);
+      break;
+    case "paper":
+      whoosh(c, sfxGain, t, 0.45);
       break;
     case "sit":
       blip(c, sfxGain, "triangle", 320, t, 0.28, 0.2, 130);

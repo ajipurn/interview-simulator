@@ -24,6 +24,24 @@ export const SPAWN = new THREE.Vector3(0, 0, 8.5);
 /** Player chair — walking near it offers "sit", sitting starts the interview. */
 export const SIT_POS = new THREE.Vector3(0, 0, -3.9);
 const SIT_NEAR = 1.15;
+
+/** Casual lobby seats — sit with E, stand with any movement. rotY matches the furniture. */
+export interface Seat {
+  x: number;
+  z: number;
+  rotY: number;
+}
+export const SEATS: Seat[] = [
+  { x: -5.9, z: 4.5, rotY: Math.PI / 2 }, // sofa west
+  { x: -2.1, z: 4.5, rotY: -Math.PI / 2 }, // sofa east
+  { x: -4, z: 6.3, rotY: Math.PI }, // lounge chair
+  { x: 6.1, z: 8, rotY: -Math.PI / 2 }, // reception chair
+];
+const SEAT_NEAR = 1.25;
+
+/** Newspaper on the coffee table — readable from nearby or from the sofas. */
+const PAPER_POS = new THREE.Vector3(-3.8, 0, 4.73);
+const PAPER_NEAR = 2.0;
 const SPEED = 3.1;
 const PLAYER_RADIUS = 0.3;
 /** Chibi height — mini characters normalized to this. */
@@ -301,10 +319,12 @@ function Poster({
   position,
   url,
   make,
+  rotY = 0,
 }: {
   position: [number, number, number];
   url: string;
   make: () => THREE.CanvasTexture;
+  rotY?: number;
 }) {
   const tex = useMemo(make, [make]);
   const [hover, setHover] = useState(false);
@@ -317,6 +337,7 @@ function Poster({
   return (
     <mesh
       position={position}
+      rotation={[0, rotY, 0]}
       scale={hover ? 1.06 : 1}
       onClick={(e) => {
         e.stopPropagation();
@@ -331,6 +352,64 @@ function Poster({
         emissive={hover ? "#3a4b66" : "#000000"}
         emissiveIntensity={0.8}
       />
+    </mesh>
+  );
+}
+
+/** Tiny front page for the 3D prop — the real article lives in the DOM overlay. */
+function makeNewspaperMini(): THREE.CanvasTexture {
+  const c = document.createElement("canvas");
+  c.width = 256;
+  c.height = 340;
+  const g = c.getContext("2d");
+  if (g) {
+    g.fillStyle = "#efe6cd";
+    g.fillRect(0, 0, 256, 340);
+    g.fillStyle = "#211d14";
+    g.textAlign = "center";
+    g.font = "bold 34px Georgia, serif";
+    g.fillText("HARIAN CUAN", 128, 40);
+    g.fillRect(12, 52, 232, 3);
+    g.font = "bold 26px Georgia, serif";
+    g.fillText("AJI PURNOMO", 128, 92);
+    g.fillText("BIKIN HEBOH!", 128, 120);
+    // photo box with a big initial
+    g.fillRect(20, 140, 100, 84);
+    g.fillStyle = "#efe6cd";
+    g.font = "bold 52px monospace";
+    g.fillText("A", 70, 200);
+    // fake body text
+    g.fillStyle = "#4a4436";
+    for (let y = 144; y <= 216; y += 13) g.fillRect(134, y, 102, 5);
+    for (let y = 240; y <= 318; y += 13) g.fillRect(20, y, 216, 5);
+  }
+  return new THREE.CanvasTexture(c);
+}
+
+/** Clickable newspaper lying on the coffee table. */
+function Newspaper({ onRead }: { onRead: () => void }) {
+  const tex = useMemo(makeNewspaperMini, []);
+  const [hover, setHover] = useState(false);
+  useEffect(() => {
+    document.body.style.cursor = hover ? "pointer" : "auto";
+    return () => {
+      document.body.style.cursor = "auto";
+    };
+  }, [hover]);
+  return (
+    <mesh
+      position={[PAPER_POS.x, 0.368, PAPER_POS.z]}
+      rotation={[-Math.PI / 2, 0, 0.35]}
+      scale={hover ? 1.12 : 1}
+      onClick={(e) => {
+        e.stopPropagation();
+        onRead();
+      }}
+      onPointerOver={() => setHover(true)}
+      onPointerOut={() => setHover(false)}
+    >
+      <planeGeometry args={[0.42, 0.56]} />
+      <meshStandardMaterial map={tex} emissive={hover ? "#6a5b2a" : "#000000"} emissiveIntensity={0.6} />
     </mesh>
   );
 }
@@ -383,7 +462,14 @@ function Office({ dollhouse }: { dollhouse: boolean }) {
           wall can be a stub in dollhouse view, so hide it all there */}
       {!dollhouse && (
         <>
-          <Poster position={[-1.8, 1.7, -6.91]} url={FIDA_URL} make={makeFidaPoster} />
+          {/* west wall, between the window and the back corner — the bookcase was
+              covering it on the back wall */}
+          <Poster
+            position={[-4.41, 1.7, -5.75]}
+            rotY={Math.PI / 2}
+            url={FIDA_URL}
+            make={makeFidaPoster}
+          />
           <Poster position={[1.8, 1.7, -6.91]} url={POSTER_URL} make={makeAjiPoster} />
           <Painting x={-6.92} z={1.5} rotY={Math.PI / 2} color="#c96f4a" />
           {[3, 7].map((z) => (
@@ -491,16 +577,25 @@ const PLAYER_CLIPS = ["idle", "walk", "sit"] as const;
  * Third-person player: world-axis WASD/arrow movement with wall & furniture
  * collision, baked walk/idle/sit clips, follow camera. When `seated`, snaps
  * onto the chair and the camera moves over the shoulder toward the interviewer.
+ * `seat` = casual lobby seat; movement input stands back up (via `onStand`).
  */
 function Player({
   seated,
+  seat,
   controllable,
   onNearChair,
+  onNearSeat,
+  onNearPaper,
+  onStand,
   stick,
 }: {
   seated: boolean;
+  seat: Seat | null;
   controllable: boolean;
   onNearChair: (near: boolean) => void;
+  onNearSeat: (index: number | null) => void;
+  onNearPaper: (near: boolean) => void;
+  onStand: () => void;
   stick: { current: StickState };
 }) {
   const { scene, animations, scale } = useBlockyCharacter("/models/mini/character-male-d.glb");
@@ -509,6 +604,11 @@ function Player({
   const pos = useRef(SPAWN.clone());
   const facing = useRef(Math.PI); // toward -z, into the office
   const near = useRef(false);
+  const nearSeat = useRef<number | null>(null);
+  const nearPaper = useRef(false);
+  // where the player stood before sitting down — restored on stand
+  const preSit = useRef<THREE.Vector3 | null>(null);
+  const wasSeatRef = useRef(false);
   const keys = useRef({ up: false, down: false, left: false, right: false });
   const camGoal = useMemo(() => new THREE.Vector3(), []);
   const lookGoal = useMemo(() => new THREE.Vector3(), []);
@@ -580,6 +680,13 @@ function Player({
     };
   }, []);
 
+  // save the walkable spot on sit-down, restore it on stand-up
+  useEffect(() => {
+    if (seat && !wasSeatRef.current) preSit.current = pos.current.clone();
+    else if (!seat && wasSeatRef.current && preSit.current) pos.current.copy(preSit.current);
+    wasSeatRef.current = !!seat;
+  }, [seat]);
+
   useFrame((_, rawDt) => {
     const dt = Math.min(rawDt, 0.05);
     const p = pos.current;
@@ -588,6 +695,15 @@ function Player({
     if (seated) {
       p.set(SIT_POS.x, 0, SIT_POS.z);
       facing.current = Math.PI; // face the interviewer
+    } else if (seat) {
+      p.set(seat.x, 0, seat.z);
+      facing.current = seat.rotY;
+      // any movement input = stand back up
+      if (controllable) {
+        const ix = (keys.current.right ? 1 : 0) - (keys.current.left ? 1 : 0) + stick.current.x;
+        const iz = (keys.current.down ? 1 : 0) - (keys.current.up ? 1 : 0) + stick.current.z;
+        if (Math.hypot(ix, iz) > 0.4) onStand();
+      }
     } else if (controllable) {
       // keyboard + joystick merge; both are screen-relative
       let ix = (keys.current.right ? 1 : 0) - (keys.current.left ? 1 : 0) + stick.current.x;
@@ -629,14 +745,35 @@ function Player({
         near.current = isNear;
         onNearChair(isNear);
       }
+      let si: number | null = null;
+      for (let i = 0; i < SEATS.length; i++) {
+        const s = SEATS[i];
+        if (s && Math.hypot(p.x - s.x, p.z - s.z) < SEAT_NEAR) {
+          si = i;
+          break;
+        }
+      }
+      if (si !== nearSeat.current) {
+        nearSeat.current = si;
+        onNearSeat(si);
+      }
     }
 
-    play(seated ? "sit" : moving ? "walk" : "idle");
+    // newspaper reachable while roaming the lobby or from a seat next to it
+    if (!seated) {
+      const np = Math.hypot(p.x - PAPER_POS.x, p.z - PAPER_POS.z) < PAPER_NEAR;
+      if (np !== nearPaper.current) {
+        nearPaper.current = np;
+        onNearPaper(np);
+      }
+    }
+
+    play(seated || seat ? "sit" : moving ? "walk" : "idle");
     mixer.update(dt);
 
     const g = group.current;
     if (g) {
-      g.position.set(p.x, seated ? SEAT_Y : 0, p.z);
+      g.position.set(p.x, seated || seat ? SEAT_Y : 0, p.z);
       g.rotation.y = facing.current;
     }
 
@@ -669,11 +806,24 @@ export function Scene({
   onNearChair,
   aiLevel,
   stick,
+  seat,
+  onNearSeat,
+  onNearPaper,
+  onStand,
+  onReadPaper,
+  inputLocked,
 }: {
   phase: GamePhase;
   onNearChair: (near: boolean) => void;
   aiLevel: { current: number };
   stick: { current: StickState };
+  seat: Seat | null;
+  onNearSeat: (index: number | null) => void;
+  onNearPaper: (near: boolean) => void;
+  onStand: () => void;
+  onReadPaper: () => void;
+  /** True while the newspaper overlay is open — freezes player input. */
+  inputLocked: boolean;
 }) {
   const seated = phase === "interview" || phase === "scoring" || phase === "report";
   return (
@@ -694,11 +844,16 @@ export function Scene({
         shadow-camera-far={40}
       />
       <Office dollhouse={!seated} />
+      <Newspaper onRead={onReadPaper} />
       <Interviewer aiLevel={aiLevel} />
       <Player
         seated={seated}
-        controllable={phase === "explore"}
+        seat={seat}
+        controllable={phase === "explore" && !inputLocked}
         onNearChair={onNearChair}
+        onNearSeat={onNearSeat}
+        onNearPaper={onNearPaper}
+        onStand={onStand}
         stick={stick}
       />
     </>

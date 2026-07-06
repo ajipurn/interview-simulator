@@ -87,7 +87,7 @@ describe("InterviewEngine: happy path", () => {
     const engine = new InterviewEngine(fixtureConfig(), testLlm(DEFAULT_RULES));
 
     const opening = engine.begin();
-    expect(opening.utterance).toContain("Aku Selia");
+    expect(opening.utterance.toLowerCase()).toContain("aku selia");
     // game context: no AI disclosure — the player knows; opener is a warm 1-on-1
 
     const q1 = await engine.onCandidateAnswer("Siap!");

@@ -2,7 +2,7 @@
 
 import { Canvas } from "@react-three/fiber";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { type GamePhase, Scene, type StickState } from "../components/scene";
+import { type GamePhase, SEATS, Scene, type StickState } from "../components/scene";
 import * as audio from "../lib/audio";
 import { type GameReport, type ServerMsg, VoiceClient } from "../lib/voice-client";
 
@@ -181,6 +181,10 @@ export default function Game() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [nearChair, setNearChair] = useState(false);
+  const [nearSeat, setNearSeat] = useState<number | null>(null);
+  const [seatIdx, setSeatIdx] = useState<number | null>(null);
+  const [nearPaper, setNearPaper] = useState(false);
+  const [reading, setReading] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [captions, setCaptions] = useState<Caption[]>([]);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
@@ -321,15 +325,35 @@ export default function Game() {
       });
   }, [handleMessage]);
 
-  // E near the chair = sit down & start the interview
+  const stand = useCallback(() => setSeatIdx(null), []);
+  const sitCasual = useCallback(() => {
+    if (nearSeat !== null) {
+      audio.sfx("sit");
+      setSeatIdx(nearSeat);
+    }
+  }, [nearSeat]);
+  const openPaper = useCallback(() => {
+    audio.sfx("paper");
+    setReading(true);
+  }, []);
+
+  // E = sit/stand (interview chair takes priority), R = read the newspaper, Esc = close it
   useEffect(() => {
     if (phase !== "explore") return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.code === "KeyE" && nearChair && !connecting) sit();
+      if (e.code === "KeyE") {
+        if (nearChair && !connecting) sit();
+        else if (seatIdx !== null) stand();
+        else if (nearSeat !== null) sitCasual();
+      } else if (e.code === "KeyR" && !reading && nearPaper) {
+        openPaper();
+      } else if ((e.code === "Escape" || e.code === "KeyR") && reading) {
+        setReading(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase, nearChair, connecting, sit]);
+  }, [phase, nearChair, connecting, sit, seatIdx, nearSeat, nearPaper, reading, stand, sitCasual, openPaper]);
 
   const showForm = loaded && (editing || !profile);
   const showMenu = loaded && !editing && !!profile;
@@ -343,6 +367,12 @@ export default function Game() {
             onNearChair={setNearChair}
             aiLevel={aiLevelRef.current}
             stick={stickRef}
+            seat={seatIdx !== null ? (SEATS[seatIdx] ?? null) : null}
+            onNearSeat={setNearSeat}
+            onNearPaper={setNearPaper}
+            onStand={stand}
+            onReadPaper={openPaper}
+            inputLocked={reading}
           />
         </Suspense>
       </Canvas>
@@ -416,23 +446,40 @@ export default function Game() {
           >
             {mutedUi ? <IconSpeakerOff /> : <IconSpeakerOn />}
           </button>
-          {phase === "explore" && (
+          {phase === "explore" && !reading && (
             <div className="hint">
-              {connecting
-                ? "Menyalakan mikrofon…"
-                : nearChair
-                  ? touchUi
+              {(() => {
+                if (connecting) return "Menyalakan mikrofon…";
+                if (nearChair)
+                  return touchUi
                     ? "Tap tombol Duduk untuk mulai interview"
-                    : "Tekan E untuk duduk dan mulai interview"
-                  : touchUi
-                    ? "Joystick untuk jalan · geser layar untuk putar kamera"
-                    : "WASD jalan · drag mouse putar kamera · scroll zoom"}
+                    : "Tekan E untuk duduk dan mulai interview";
+                const parts: string[] = [];
+                if (seatIdx !== null) parts.push(touchUi ? "Tap Berdiri untuk bangun" : "E untuk berdiri");
+                else if (nearSeat !== null)
+                  parts.push(touchUi ? "Tap Duduk untuk santai" : "E untuk duduk santai");
+                if (nearPaper) parts.push(touchUi ? "Tap Koran untuk baca" : "R untuk baca koran");
+                if (parts.length > 0) return parts.join(" · ");
+                return touchUi
+                  ? "Joystick untuk jalan · geser layar untuk putar kamera"
+                  : "WASD jalan · drag mouse putar kamera · scroll zoom";
+              })()}
             </div>
           )}
           {phase === "explore" && touchUi && <Joystick stick={stickRef} />}
           {phase === "explore" && touchUi && nearChair && !connecting && (
             <button type="button" className="sit-btn" onClick={sit}>
               Duduk
+            </button>
+          )}
+          {phase === "explore" && touchUi && !nearChair && (seatIdx !== null || nearSeat !== null) && (
+            <button type="button" className="sit-btn" onClick={seatIdx !== null ? stand : sitCasual}>
+              {seatIdx !== null ? "Berdiri" : "Duduk"}
+            </button>
+          )}
+          {phase === "explore" && touchUi && nearPaper && !reading && (
+            <button type="button" className="read-btn" onClick={openPaper}>
+              Koran
             </button>
           )}
           {phase === "interview" && (
@@ -471,6 +518,74 @@ export default function Game() {
             </>
           )}
           {error && <p className="error floating">{error}</p>}
+        </div>
+      )}
+
+      {reading && (
+        // biome-ignore lint/a11y: backdrop dismiss; Esc/R and the ✕ button cover keyboard users
+        <div className="overlay dim paper-zone" onClick={() => setReading(false)}>
+          <article className="newspaper" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="paper-close" onClick={() => setReading(false)}>
+              ✕
+            </button>
+            <header className="np-header">
+              <p className="np-top">EDISI SPESIAL · HARGA: GRATIS, AMBIL SAJA · CUACA: CERAH BERAWAN PIXEL</p>
+              <h1 className="np-mast">HARIAN CUAN</h1>
+              <p className="np-motto">Koran resmi PT Mencari Cuan Sejati — akurasi berita dijamin 60%</p>
+            </header>
+            <h2 className="np-head">AJI PURNOMO: DALANG DI BALIK KANTOR VIRTUAL INI</h2>
+            <p className="np-deck">
+              Satu developer, satu kantor pixel, satu misi: bikin latihan interview tidak lagi menyeramkan.
+            </p>
+            <div className="np-cols">
+              <p>
+                <b>LOBI KANTOR</b> — Sumber terpercaya menyebutkan seluruh gedung yang sedang Anda
+                jelajahi ini — lantai kayu, sofa empuk, sampai pewawancara yang suka manggut-manggut
+                itu — dirakit oleh satu orang: <b>Aji Purnomo</b>, AI Engineer merangkap Frontend
+                Developer.
+              </p>
+              <p>
+                Saksi mata melaporkan Aji terbiasa menggarap antarmuka web di siang hari dan menyetel
+                model AI di malam hari. &ldquo;Kalau ketemu bug, saya tatap dulu lima menit. Kadang
+                bugnya sadar diri lalu pergi sendiri,&rdquo; ujarnya santai kepada wartawan kami.
+              </p>
+              <aside className="np-facts">
+                <h3>FAKTA SINGKAT</h3>
+                <ul>
+                  <li>Nama: Aji Purnomo</li>
+                  <li>Kelas: AI Engineer</li>
+                  <li>Sub-kelas: Frontend Developer</li>
+                  <li>
+                    Markas:{" "}
+                    <a href="https://aji.is-a.dev" target="_blank" rel="noopener noreferrer">
+                      aji.is-a.dev
+                    </a>
+                  </li>
+                  <li>
+                    Proyek:{" "}
+                    <a href="https://fida.my.id" target="_blank" rel="noopener noreferrer">
+                      Fida
+                    </a>
+                  </li>
+                  <li>Status: bisa di-hire (buruan)</li>
+                </ul>
+              </aside>
+              <p>
+                Proyek terbarunya, <b>Fida</b>, memastikan agen AI bisa membaca kode tanpa ikut
+                membaca rahasia — secret diredaksi sebelum sampai ke model. Portofolio lengkapnya
+                buka 24 jam di <b>aji.is-a.dev</b>, tanpa perlu janji temu.
+              </p>
+              <p>
+                Ketika ditanya mengapa membangun simulator interview, ia menjawab, &ldquo;Biar semua
+                orang bisa gladi bersih dulu. Grogi itu wajar — asal jangan pas ditanya HRD
+                beneran.&rdquo;
+              </p>
+            </div>
+            <footer className="np-foot">
+              IKLAN BARIS: PT Mencari Cuan Sejati membuka lowongan untuk posisi apa pun yang Anda
+              ketik di formulir tadi. Duduk di kursi ruang interview untuk melamar.
+            </footer>
+          </article>
         </div>
       )}
 
