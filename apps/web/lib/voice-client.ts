@@ -92,6 +92,7 @@ export class VoiceClient {
   private playing = new Set<AudioBufferSourceNode>();
   private raf = 0;
   private stream: MediaStream | null = null;
+  private cleanupResume: () => void = () => {};
 
   async connect(wsUrl: string): Promise<void> {
     // mic capture
@@ -124,6 +125,20 @@ export class VoiceClient {
     outGain.connect(outAnalyser);
     outAnalyser.connect(outCtx.destination);
     this.outGain = outGain;
+
+    // Autoplay policy can hand us suspended contexts (no sound, no error, captions
+    // still flow). Resume now — and if the browser refuses, on the next gesture.
+    const resumeAll = () => {
+      if (micCtx.state === "suspended") void micCtx.resume().catch(() => {});
+      if (outCtx.state === "suspended") void outCtx.resume().catch(() => {});
+    };
+    resumeAll();
+    window.addEventListener("pointerdown", resumeAll);
+    window.addEventListener("keydown", resumeAll);
+    this.cleanupResume = () => {
+      window.removeEventListener("pointerdown", resumeAll);
+      window.removeEventListener("keydown", resumeAll);
+    };
 
     const micBuf = new Uint8Array(micAnalyser.frequencyBinCount);
     const outBuf = new Uint8Array(outAnalyser.frequencyBinCount);
@@ -200,6 +215,7 @@ export class VoiceClient {
   }
 
   dispose(): void {
+    this.cleanupResume();
     cancelAnimationFrame(this.raf);
     this.flush();
     this.ws?.close();
