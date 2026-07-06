@@ -107,6 +107,11 @@ describe("InterviewEngine: happy path", () => {
     expect(answer.utterance).toContain("tim rekruter");
     expect(answer.done).toBe(false);
 
+    // negation word inside a real question must NOT read as "no more questions"
+    const answer2 = await engine.onCandidateAnswer("Ada kesempatan remote nggak?");
+    expect(answer2.done).toBe(false);
+    expect(answer2.utterance).toContain("tim rekruter");
+
     const closing = await engine.onCandidateAnswer("Tidak ada lagi, terima kasih.");
     expect(closing.done).toBe(true);
     expect(closing.utterance).toContain("Terima kasih");
@@ -116,6 +121,7 @@ describe("InterviewEngine: happy path", () => {
       "OPENING",
       "CORE_QUESTION",
       "CORE_QUESTION",
+      "CLOSING",
       "CLOSING",
       "CLOSING",
       "CLOSING",

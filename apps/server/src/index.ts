@@ -370,8 +370,23 @@ async function runInterview(ws: WebSocket, req: IncomingMessage): Promise<void> 
         total,
         phase: engine.state.phase,
       });
-      // let the closing line finish playing before scoring
-      if (reply.done) setTimeout(() => void finalize().catch(console.error), 9_000);
+      // let the closing line finish playing before scoring: a fixed delay cut
+      // the goodbye mid-sentence (closing playout is ~12-15s and TTFB varies) —
+      // wait until synthesized audio has actually drained, with a hard cap
+      if (reply.done) {
+        const t0 = Date.now();
+        let sawAudio = false;
+        const poll = setInterval(() => {
+          const pending = pipeline.pendingPlayoutMs();
+          if (pending > 0) sawAudio = true;
+          const drained = sawAudio && pending === 0;
+          if (drained || Date.now() - t0 > 45_000) {
+            clearInterval(poll);
+            void finalize().catch(console.error);
+          }
+        }, 500);
+        poll.unref();
+      }
       yield reply.utterance;
     })();
   };

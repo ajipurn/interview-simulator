@@ -226,6 +226,11 @@ export class VoicePipeline {
     return performance.now() < this.audioUntilMs + graceMs;
   }
 
+  /** Estimated ms until all written audio has finished playing (0 = quiet). */
+  pendingPlayoutMs(): number {
+    return Math.max(0, this.audioUntilMs - performance.now());
+  }
+
   /**
    * A *final* that is (near-)verbatim one of Selia's recent sentences — her own
    * voice looped back, not an answer. Ordered whole-sentence similarity, so an

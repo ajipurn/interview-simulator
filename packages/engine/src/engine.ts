@@ -21,6 +21,13 @@ import type {
 } from "./types.js";
 
 const NO_QUESTION_PATTERN = /\b(tidak|nggak|ga(k)? ada|belum ada|cukup|no|nothing)\b/i;
+/**
+ * Interrogative cues. Indonesian questions routinely embed negation words
+ * ("ada bonusnya nggak?", "remote atau tidak?") — NO_QUESTION alone read those
+ * as "no more questions" and hung up on the candidate mid-conversation.
+ */
+const QUESTION_CUE =
+  /\?|\b(apa(kah)?|bagaimana|gimana|berapa|kapan|kenapa|mengapa|siapa|di\s?mana|dimana|boleh|bisa|adakah)\b/i;
 
 export interface EngineReply {
   utterance: string;
@@ -247,7 +254,8 @@ export class InterviewEngine {
   }
 
   private async handleCandidateQuestion(answer: string): Promise<EngineReply> {
-    const noQuestion = NO_QUESTION_PATTERN.test(answer) && answer.length < 60;
+    const noQuestion =
+      NO_QUESTION_PATTERN.test(answer) && answer.length < 60 && !QUESTION_CUE.test(answer);
     if (noQuestion || this.st.candidateQuestionsAnswered >= 2) {
       return this.close();
     }
