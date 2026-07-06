@@ -1,6 +1,6 @@
 # Interview Simulator
 
-A 3D web game for practicing job interviews: create a character, type the role you're applying for, walk around a pixel office, take a seat in the interview room, and have a **real-time voice interview** with an AI interviewer (in Indonesian) — ending with a per-competency score report and feedback.
+A 3D web game for practicing job interviews: create a character, type the role you're applying for, walk around a virtual office, take a seat in the interview room, and have a **real-time voice interview** with an AI interviewer (in Indonesian) — ending with a per-competency score report and feedback.
 
 > Runs without any API keys: every provider defaults to `mock` (fully offline). The interviewer speaks in sine beeps and candidate answers are scripted — enough to try the whole game loop.
 
