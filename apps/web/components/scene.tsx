@@ -14,9 +14,9 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 export type GamePhase = "lobby" | "explore" | "interview" | "scoring" | "report";
 
-export const SPAWN = new THREE.Vector3(0, 0, 8.2);
+export const SPAWN = new THREE.Vector3(0, 0, 8.5);
 /** Player chair — walking near it offers "sit", sitting starts the interview. */
-export const SIT_POS = new THREE.Vector3(0, 0, -2.9);
+export const SIT_POS = new THREE.Vector3(0, 0, -3.9);
 const SIT_NEAR = 1.15;
 const SPEED = 3.1;
 const PLAYER_RADIUS = 0.3;
@@ -33,10 +33,15 @@ const F = {
   chair: "/models/furniture/chairDesk.glb",
   bookcase: "/models/furniture/bookcaseClosedWide.glb",
   plant: "/models/furniture/pottedPlant.glb",
+  plantSmall: "/models/furniture/plantSmall2.glb",
   sofa: "/models/furniture/loungeSofa.glb",
+  loungeChair: "/models/furniture/loungeChair.glb",
+  tableCoffee: "/models/furniture/tableCoffee.glb",
   laptop: "/models/furniture/laptop.glb",
   books: "/models/furniture/books.glb",
   rug: "/models/furniture/rugRectangle.glb",
+  rugRound: "/models/furniture/rugRound.glb",
+  doormat: "/models/furniture/rugDoormat.glb",
 };
 
 // --- walkable space -----------------------------------------------------
@@ -44,20 +49,33 @@ const F = {
 // ponytail: no navmesh/physics until the floor plan stops being two boxes.
 
 const REGIONS: { x1: number; x2: number; z1: number; z2: number }[] = [
-  { x1: -1.3, x2: 1.3, z1: 0.2, z2: 8.7 }, // corridor
-  { x1: -3.6, x2: 3.6, z1: -5.7, z2: -0.2 }, // interview room
+  { x1: -6.9, x2: 6.9, z1: 0.1, z2: 9.9 }, // open lobby (14×10)
+  { x1: -4.4, x2: 4.4, z1: -6.9, z2: -0.1 }, // interview room (9×7)
   // door gap — must overlap both rooms by > 2×PLAYER_RADIUS or a dead zone forms
-  { x1: -0.9, x2: 0.9, z1: -0.9, z2: 0.9 },
+  { x1: -1.1, x2: 1.1, z1: -0.9, z2: 0.9 },
 ];
 
 const BLOCKERS: { x1: number; x2: number; z1: number; z2: number }[] = [
-  { x1: -1.2, x2: 1.2, z1: -5.4, z2: -3.4 }, // desk + interviewer side
-  { x1: -0.35, x2: 0.35, z1: -3.25, z2: -2.55 }, // player chair
-  { x1: -3.85, x2: -2.95, z1: -6.05, z2: -5.15 }, // room plants
-  { x1: 2.95, x2: 3.85, z1: -6.05, z2: -5.15 },
-  { x1: -3.5, x2: -1.9, z1: -6.1, z2: -5.6 }, // bookcase
-  { x1: 0.75, x2: 1.65, z1: 1.15, z2: 2.05 }, // corridor plant
-  { x1: -1.5, x2: -0.6, z1: 4.5, z2: 6.5 }, // corridor sofa
+  // interview room
+  { x1: -1.0, x2: 1.0, z1: -6.4, z2: -4.4 }, // desk + interviewer chair
+  { x1: -0.5, x2: 0.5, z1: -4.35, z2: -3.45 }, // player chair
+  { x1: -3.9, x2: -2.1, z1: -7.0, z2: -6.3 }, // bookcase
+  { x1: -4.3, x2: -3.7, z1: -6.8, z2: -6.2 }, // room plants
+  { x1: 3.7, x2: 4.3, z1: -6.8, z2: -6.2 },
+  // lobby: waiting corner (west)
+  { x1: -6.4, x2: -5.4, z1: 3.4, z2: 5.6 }, // sofa west
+  { x1: -2.6, x2: -1.6, z1: 3.4, z2: 5.6 }, // sofa east
+  { x1: -4.5, x2: -3.5, z1: 4.0, z2: 5.0 }, // coffee table
+  { x1: -4.6, x2: -3.4, z1: 5.9, z2: 6.7 }, // lounge chair
+  // lobby: reception (east, near entrance) + shelf + plants
+  { x1: 4.4, x2: 6.0, z1: 7.4, z2: 8.6 }, // reception desk
+  { x1: 5.7, x2: 6.6, z1: 7.5, z2: 8.5 }, // reception chair
+  { x1: 6.3, x2: 7.0, z1: 3.6, z2: 5.4 }, // lobby bookcase
+  { x1: -6.8, x2: -6.2, z1: 0.3, z2: 0.9 },
+  { x1: 6.2, x2: 6.8, z1: 0.3, z2: 0.9 },
+  { x1: -6.8, x2: -6.2, z1: 9.1, z2: 9.7 },
+  { x1: -2.2, x2: -1.6, z1: 0.2, z2: 0.8 }, // plants flanking the door
+  { x1: 1.6, x2: 2.2, z1: 0.2, z2: 0.8 },
 ];
 
 function canWalk(x: number, z: number): boolean {
@@ -200,65 +218,94 @@ function Painting({ x, z, rotY, color }: { x: number; z: number; rotY: number; c
 function Office({ dollhouse }: { dollhouse: boolean }) {
   return (
     <group>
-      {/* floor: corridor wood + room carpet */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 3]} receiveShadow>
-        <planeGeometry args={[14, 14]} />
+      {/* floors: lobby wood + interview-room carpet */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 5]} receiveShadow>
+        <planeGeometry args={[14, 10]} />
         <meshStandardMaterial color="#a8895f" />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, -3.2]} receiveShadow>
-        <planeGeometry args={[7.8, 5.8]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, -3.5]} receiveShadow>
+        <planeGeometry args={[9, 7]} />
         <meshStandardMaterial color="#31465f" />
       </mesh>
       {/* ceiling — hidden in helicopter view */}
       {!dollhouse && (
-        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 3, 1]}>
-          <planeGeometry args={[16, 18]} />
+        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 3, 1.5]}>
+          <planeGeometry args={[15, 18]} />
           <meshStandardMaterial color="#f4f1ea" />
         </mesh>
       )}
 
-      {/* corridor walls (entrance z=9 → room z=0); east wall faces the helicopter camera */}
-      <Wall position={[-1.6, 1.5, 5]} size={[0.15, 3, 8]} />
-      <Wall position={[1.6, 1.5, 5]} size={[0.15, 3, 8]} stub={dollhouse} />
-      <Painting x={-1.5} z={6.5} rotY={Math.PI / 2} color="#c96f4a" />
-      {!dollhouse && <Painting x={1.5} z={4.5} rotY={-Math.PI / 2} color="#4a86c9" />}
-      <Furn url={F.plant} position={[1.2, 0, 1.6]} />
-      <Furn url={F.sofa} position={[-1.05, 0, 5.5]} rotY={Math.PI / 2} />
-      <Furn url={F.rug} position={[0, 0.005, 7.6]} scale={FURN_SCALE * 0.8} />
+      {/* lobby shell (14×10, z 0..10); south + east walls face the helicopter camera */}
+      <Wall position={[-7, 1.5, 5]} size={[0.15, 3, 10.15]} />
+      <Wall position={[7, 1.5, 5]} size={[0.15, 3, 10.15]} stub={dollhouse} />
+      <Wall position={[0, 1.5, 10]} size={[14.15, 3, 0.15]} stub={dollhouse} />
 
-      {/* interview room shell; east + front walls face the helicopter camera */}
-      <Wall position={[0, 1.5, -6.15]} size={[8, 3, 0.15]} />
-      <Wall position={[-4, 1.5, -3]} size={[0.15, 3, 6.3]} />
-      <Wall position={[4, 1.5, -3]} size={[0.15, 3, 6.3]} stub={dollhouse} />
-      {/* front wall with a door gap */}
-      <Wall position={[-2.6, 1.5, 0]} size={[2.9, 3, 0.15]} stub={dollhouse} />
-      <Wall position={[2.6, 1.5, 0]} size={[2.9, 3, 0.15]} stub={dollhouse} />
-      {!dollhouse && <Wall position={[0, 2.75, 0]} size={[2.3, 0.5, 0.15]} />}
+      {/* interview room shell (9×7, z -7..0); east + front walls face the camera */}
+      <Wall position={[0, 1.5, -7]} size={[9.15, 3, 0.15]} />
+      <Wall position={[-4.5, 1.5, -3.5]} size={[0.15, 3, 7.15]} />
+      <Wall position={[4.5, 1.5, -3.5]} size={[0.15, 3, 7.15]} stub={dollhouse} />
+      {/* front wall with a centered door gap (±1.2) */}
+      <Wall position={[-4.1, 1.5, 0]} size={[5.8, 3, 0.15]} stub={dollhouse} />
+      <Wall position={[4.1, 1.5, 0]} size={[5.8, 3, 0.15]} stub={dollhouse} />
+      {!dollhouse && <Wall position={[0, 2.75, 0]} size={[2.4, 0.5, 0.15]} />}
 
-      {/* decor on the wall the player stares at all game */}
-      <Painting x={-1.6} z={-6.05} rotY={0} color="#c9a84a" />
-      <Painting x={1.6} z={-6.05} rotY={0} color="#4a86c9" />
+      {/* paintings: interview back wall + lobby west wall */}
+      <Painting x={-1.8} z={-6.92} rotY={0} color="#c9a84a" />
+      <Painting x={1.8} z={-6.92} rotY={0} color="#4a86c9" />
+      <Painting x={-6.92} z={1.5} rotY={Math.PI / 2} color="#c96f4a" />
 
-      {/* window with "daylight" on the left wall */}
-      <mesh position={[-3.9, 1.6, -3.6]} rotation={[0, Math.PI / 2, 0]}>
+      {/* "daylight" windows on the west walls */}
+      {[3, 7].map((z) => (
+        <mesh key={z} position={[-6.92, 1.6, z]} rotation={[0, Math.PI / 2, 0]}>
+          <planeGeometry args={[2.6, 1.5]} />
+          <meshStandardMaterial color="#bcd6ef" emissive="#9fc4e8" emissiveIntensity={0.9} />
+        </mesh>
+      ))}
+      <mesh position={[-4.42, 1.6, -3.5]} rotation={[0, Math.PI / 2, 0]}>
         <planeGeometry args={[2.6, 1.5]} />
         <meshStandardMaterial color="#bcd6ef" emissive="#9fc4e8" emissiveIntensity={0.9} />
       </mesh>
 
-      {/* furniture — Kenney Furniture Kit */}
-      <Furn url={F.rug} position={[0, 0.006, -3.7]} />
-      <Furn url={F.desk} position={[0, 0, -4]} />
-      <Furn url={F.chair} position={[0, 0, -4.9]} />
-      <Furn url={F.chair} position={[0, 0, -2.9]} rotY={Math.PI} />
-      <Furn url={F.laptop} position={[0.35, DESK_TOP, -4]} rotY={Math.PI} scale={FURN_SCALE * 0.55} />
-      <Furn url={F.books} position={[-0.5, DESK_TOP, -4.05]} rotY={0.4} />
-      <Furn url={F.bookcase} position={[-2.7, 0, -5.88]} />
-      <Furn url={F.plant} position={[-3.4, 0, -5.6]} />
-      <Furn url={F.plant} position={[3.4, 0, -5.6]} />
+      {/* interview room furniture */}
+      <Furn url={F.rug} position={[0, 0.006, -4.6]} />
+      <Furn url={F.desk} position={[0, 0, -5]} />
+      <Furn url={F.chair} position={[0, 0, -5.9]} />
+      <Furn url={F.chair} position={[0, 0, -3.9]} rotY={Math.PI} />
+      <Furn url={F.laptop} position={[0.35, DESK_TOP, -5]} rotY={Math.PI} scale={FURN_SCALE * 0.55} />
+      <Furn url={F.books} position={[-0.5, DESK_TOP, -5.05]} rotY={0.4} />
+      <Furn url={F.bookcase} position={[-3, 0, -6.65]} />
+      <Furn url={F.plantSmall} position={[-3, 1.55, -6.65]} />
+      <Furn url={F.plant} position={[-4, 0, -6.5]} />
+      <Furn url={F.plant} position={[4, 0, -6.5]} />
 
-      <CeilingLamp x={0} z={-3.5} showFixture={!dollhouse} />
-      <CeilingLamp x={0} z={2} showFixture={!dollhouse} />
-      <CeilingLamp x={0} z={6} showFixture={!dollhouse} />
+      {/* lobby: waiting corner (west) */}
+      <Furn url={F.rugRound} position={[-4, 0.006, 4.5]} scale={FURN_SCALE * 1.2} />
+      <Furn url={F.sofa} position={[-5.9, 0, 4.5]} rotY={Math.PI / 2} />
+      <Furn url={F.sofa} position={[-2.1, 0, 4.5]} rotY={-Math.PI / 2} />
+      <Furn url={F.loungeChair} position={[-4, 0, 6.3]} rotY={Math.PI} />
+      <Furn url={F.tableCoffee} position={[-4, 0, 4.5]} />
+      <Furn url={F.books} position={[-4, 0.36, 4.5]} rotY={1.1} />
+
+      {/* lobby: reception near the entrance (east) */}
+      <Furn url={F.desk} position={[5.2, 0, 8]} rotY={-Math.PI / 2} />
+      <Furn url={F.chair} position={[6.1, 0, 8]} rotY={-Math.PI / 2} />
+      <Furn url={F.laptop} position={[5.2, DESK_TOP, 8]} rotY={Math.PI / 2} scale={FURN_SCALE * 0.55} />
+      <Furn url={F.bookcase} position={[6.68, 0, 4.5]} rotY={-Math.PI / 2} />
+      <Furn url={F.doormat} position={[0, 0.006, 9.2]} />
+
+      {/* plants around the lobby */}
+      <Furn url={F.plant} position={[-6.5, 0, 0.6]} />
+      <Furn url={F.plant} position={[6.5, 0, 0.6]} />
+      <Furn url={F.plant} position={[-6.5, 0, 9.4]} />
+      <Furn url={F.plant} position={[-1.9, 0, 0.5]} />
+      <Furn url={F.plant} position={[1.9, 0, 0.5]} />
+
+      <CeilingLamp x={0} z={-2.3} showFixture={!dollhouse} />
+      <CeilingLamp x={0} z={-5.2} showFixture={!dollhouse} />
+      <CeilingLamp x={-3.5} z={2.5} showFixture={!dollhouse} />
+      <CeilingLamp x={3.5} z={2.5} showFixture={!dollhouse} />
+      <CeilingLamp x={-3.5} z={7} showFixture={!dollhouse} />
+      <CeilingLamp x={3.5} z={7} showFixture={!dollhouse} />
     </group>
   );
 }
@@ -286,7 +333,7 @@ function Interviewer({ aiLevel }: { aiLevel: { current: number } }) {
   });
 
   return (
-    <group position={[0, SEAT_Y, -4.9]} rotation={[0, 0, 0]}>
+    <group position={[0, SEAT_Y, -5.9]} rotation={[0, 0, 0]}>
       <primitive object={scene} scale={scale} />
     </group>
   );
@@ -409,8 +456,8 @@ function Player({
     // over-the-shoulder once seated
     if (seated) {
       // chibi heads sit lower — framing tuned for the mini characters
-      camGoal.set(1.35, 1.7, -1.05);
-      lookGoal.set(-0.12, 0.9, -4.8);
+      camGoal.set(1.35, 1.7, -2.05);
+      lookGoal.set(-0.12, 0.9, -5.8);
     } else {
       camGoal.set(p.x + 4.6, 7.6, p.z + 4.6);
       lookGoal.set(p.x, 0.6, p.z);
@@ -441,14 +488,19 @@ export function Scene({
   return (
     <>
       <color attach="background" args={["#10141b"]} />
-      <fog attach="fog" args={["#10141b", 14, 36]} />
+      <fog attach="fog" args={["#10141b", 16, 48]} />
       <ambientLight intensity={0.55} />
       <directionalLight
-        position={[-6, 5, -2]}
+        position={[-8, 9, -2]}
         intensity={1.1}
         color="#dfe9f5"
         castShadow
-        shadow-mapSize={[1024, 1024]}
+        shadow-mapSize={[2048, 2048]}
+        shadow-camera-left={-14}
+        shadow-camera-right={14}
+        shadow-camera-top={14}
+        shadow-camera-bottom={-14}
+        shadow-camera-far={40}
       />
       <Office dollhouse={!seated} />
       <Interviewer aiLevel={aiLevel} />
