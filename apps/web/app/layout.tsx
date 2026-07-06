@@ -10,6 +10,7 @@ const body = VT323({ weight: "400", subsets: ["latin"], variable: "--font-body" 
 export const metadata: Metadata = {
   title: "Interview Simulator",
   description: "Latihan wawancara kerja dalam kantor 3D dengan AI interviewer bersuara.",
+  icons: { icon: "/brand.svg" },
 };
 
 // game viewport: no pinch/double-tap zoom fighting the camera controls

@@ -49,7 +49,7 @@ Ucapan AI sudah lewat guardrail deterministik bawaan engine selia (anti bocor sk
 
 Semua CC0 dari Kenney (License.txt ikut di tiap folder):
 
-- Karakter: [Mini Characters](https://kenney.nl/assets/mini-characters) — `apps/web/public/models/mini/`. Player `character-male-a`, interviewer `character-female-a`; ganti = ganti nama file (`character-{male,female}-a..f.glb`, tekstur `Textures/colormap.png` dipakai bersama).
+- Karakter: [Mini Characters](https://kenney.nl/assets/mini-characters) — `apps/web/public/models/mini/`. Hanya yang dipakai yang di-ship: player `character-male-d`, interviewer `character-female-d` (tekstur `Textures/colormap.png` dipakai bersama). Mau ganti karakter: unduh pack-nya, salin `character-*.glb` lain ke folder itu, ganti nama file di scene.tsx.
 - Furnitur: [Furniture Kit](https://kenney.nl/assets/furniture-kit) — `apps/web/public/models/furniture/`. Origin kit di sudut, komponen `Furn` me-recenter otomatis; skala global `FURN_SCALE` (kit ~setengah meter-scale).
 
 Dinding/lantai tetap primitif R3F — mereka yang mendefinisikan peta collision (`REGIONS`/`BLOCKERS` di scene.tsx).
