@@ -202,16 +202,6 @@ Aturan KERAS:
 - Setiap poin spesifik merujuk apa yang kandidat katakan, bukan template kosong.`;
 }
 
-// --- Deterministic templates (no LLM involved) ---
-
-// ponytail: server-local hour. Pass an explicit hour if per-candidate TZ matters.
-function timeGreeting(hour = new Date().getHours()): string {
-  if (hour >= 4 && hour < 11) return "Selamat pagi";
-  if (hour >= 11 && hour < 15) return "Selamat siang";
-  if (hour >= 15 && hour < 18) return "Selamat sore";
-  return "Selamat malam";
-}
-
 export function openingScript(
   candidateName: string,
   jobTitle: string,
@@ -222,7 +212,7 @@ export function openingScript(
   // clear cue to start. Topic count deliberately unspoken — nobody opens a
   // real interview with "we will cover 3 topics".
   return (
-    `${timeGreeting()} ${candidateName}. ` +
+    `Selamat datang ${candidateName}. ` +
     `Perkenalkan aku Selia, hari ini aku yang nemenin kamu ngobrol soal posisi ${jobTitle}. ` +
     `Anggap aja ini ngobrol biasa ya bukan ujian — nggak ada jawaban benar atau salah. ` +
     `Kurang lebih ${durationMin} menit, dan di akhir, gantian kamu bebas tanya apa pun ke aku. ` +
