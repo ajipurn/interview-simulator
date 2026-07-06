@@ -233,7 +233,9 @@ wss.on("connection", (ws, req) => {
  * once per session, in the background — the greeting isn't delayed, and the
  * first candidate answer lands well after these resolve.
  */
-const FILLER_LINES = ["Oke.", "Baik.", "Hmm, oke.", "Oke, menarik."];
+// neutral, non-semantic only — "Oke, menarik." after a flat answer read as a
+// non-sequitur; anything with content risks not matching what was just said
+const FILLER_LINES = ["Oke.", "Hmm."];
 
 function synthFillersInto(tts: TtsProvider, out: AudioChunk[][]): void {
   for (const line of FILLER_LINES) {

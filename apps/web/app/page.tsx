@@ -281,6 +281,25 @@ export default function Game() {
   const finishedRef = useRef(false);
   // stable ref for the avatar; swapped to the live client's ref on connect
   const aiLevelRef = useRef({ current: 0 });
+  // "Selia lagi mikir…" — between the candidate's final transcript and her
+  // first audio frame. State drives the caption dots; the ref (same object
+  // for the Canvas lifetime) drives the avatar without re-rendering the scene.
+  const [thinking, setThinking] = useState(false);
+  const thinkingRef = useRef({ current: false });
+  const thinkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markThinking = useCallback((on: boolean) => {
+    thinkingRef.current.current = on;
+    setThinking(on);
+    if (thinkTimer.current) clearTimeout(thinkTimer.current);
+    thinkTimer.current = null;
+    if (on) {
+      // failsafe: never let the dots spin forever if audio dies upstream
+      thinkTimer.current = setTimeout(() => {
+        thinkingRef.current.current = false;
+        setThinking(false);
+      }, 20_000);
+    }
+  }, []);
   const stickRef = useRef<StickState>({ x: 0, z: 0 });
   const [touchUi, setTouchUi] = useState(false);
 
@@ -392,9 +411,11 @@ export default function Game() {
       setPhase("lobby");
       return;
     }
-    if (msg.type === "caption")
+    if (msg.type === "caption") {
       setCaptions((prev) => [...prev.slice(-3), { speaker: msg.speaker, text: msg.text }]);
-    else if (msg.type === "progress") setProgress({ current: msg.current, total: msg.total });
+      // candidate final = Selia composing; any AI caption = she's answering
+      markThinking(msg.speaker === "candidate");
+    } else if (msg.type === "progress") setProgress({ current: msg.current, total: msg.total });
     else if (msg.type === "scoring") setPhase("scoring");
     else if (msg.type === "report") {
       audio.sfx("success");
@@ -406,7 +427,7 @@ export default function Game() {
         return c + 1;
       });
     }
-  }, []);
+  }, [markThinking]);
 
   const sit = useCallback(() => {
     const session = sessionRef.current;
@@ -416,6 +437,10 @@ export default function Game() {
     finishedRef.current = false; // fresh connection — closes matter again
     const client = new VoiceClient();
     client.onMessage = handleMessage;
+    // her voice arriving beats the paced AI caption — clear the cue on first frame
+    client.onAiAudio = () => {
+      if (thinkingRef.current.current) markThinking(false);
+    };
     clientRef.current = client;
     client
       .connect(`${WS_URL}/ws?session=${session}`)
@@ -434,7 +459,7 @@ export default function Game() {
             : String(err),
         );
       });
-  }, [handleMessage]);
+  }, [handleMessage, markThinking]);
 
   const stand = useCallback(() => setSeatIdx(null), []);
   const sitCasual = useCallback(() => {
@@ -477,6 +502,7 @@ export default function Game() {
             phase={phase}
             onNearChair={setNearChair}
             aiLevel={aiLevelRef.current}
+            thinking={thinkingRef.current}
             stick={stickRef}
             seat={seatIdx !== null ? (SEATS[seatIdx] ?? null) : null}
             onNearSeat={setNearSeat}
@@ -629,6 +655,16 @@ export default function Game() {
                     <b>{c.speaker === "ai" ? "Interviewer" : "Kamu"}:</b> {c.text}
                   </p>
                 ))}
+                {thinking && (
+                  <p className="ai thinking" aria-live="polite" aria-label="Interviewer sedang berpikir">
+                    <b>Interviewer:</b>
+                    <span className="dots" aria-hidden="true">
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                  </p>
+                )}
               </div>
             </>
           )}

@@ -521,10 +521,18 @@ function Office({ dollhouse }: { dollhouse: boolean }) {
 
 const INTERVIEWER_CLIPS = ["sit"] as const;
 
-function Interviewer({ aiLevel }: { aiLevel: { current: number } }) {
+function Interviewer({
+  aiLevel,
+  thinking,
+}: {
+  aiLevel: { current: number };
+  thinking: { current: boolean };
+}) {
   const { scene, animations, scale } = useBlockyCharacter("/models/mini/character-female-d.glb");
   const { mixer, play } = useClips(scene, animations, INTERVIEWER_CLIPS);
   const head = useMemo(() => scene.getObjectByName("head"), [scene]);
+  // 0..1 blend so the think-tilt eases in/out instead of snapping
+  const think = useRef(0);
 
   useEffect(() => play("sit"), [play]);
 
@@ -538,6 +546,11 @@ function Interviewer({ aiLevel }: { aiLevel: { current: number } }) {
     if (head) {
       head.rotation.x = Math.sin(t * 13) * 0.12 * level;
       head.rotation.z = Math.sin(t * 7) * 0.05 * level;
+      // think cue: slow "hmm" head-tilt while she composes a reply. Additive
+      // on top of the SET above, so it still resets to absolute every frame.
+      think.current += ((thinking.current ? 1 : 0) - think.current) * Math.min(1, dt * 4);
+      head.rotation.z += think.current * (0.16 + Math.sin(t * 1.6) * 0.05);
+      head.rotation.x += think.current * 0.05;
     }
   });
 
@@ -818,6 +831,7 @@ export function Scene({
   phase,
   onNearChair,
   aiLevel,
+  thinking,
   stick,
   seat,
   onNearSeat,
@@ -831,6 +845,7 @@ export function Scene({
   phase: GamePhase;
   onNearChair: (near: boolean) => void;
   aiLevel: { current: number };
+  thinking: { current: boolean };
   stick: { current: StickState };
   seat: Seat | null;
   onNearSeat: (index: number | null) => void;
@@ -864,7 +879,7 @@ export function Scene({
       <Office dollhouse={!seated} />
       <Newspaper onRead={onReadPaper} />
       {doorLocked && <ClosedSign />}
-      <Interviewer aiLevel={aiLevel} />
+      <Interviewer aiLevel={aiLevel} thinking={thinking} />
       <Player
         seated={seated}
         seat={seat}

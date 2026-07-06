@@ -87,6 +87,8 @@ export class VoiceClient {
   readonly aiLevel = { current: 0 };
   readonly micLevel = { current: 0 };
   onMessage: (m: ServerMsg) => void = () => {};
+  /** Fires on every AI audio frame — page clears its "thinking" cue on the first one. */
+  onAiAudio: () => void = () => {};
 
   private ws: WebSocket | null = null;
   private micCtx: AudioContext | null = null;
@@ -173,6 +175,7 @@ export class VoiceClient {
     ws.onmessage = (ev) => {
       if (ev.data instanceof ArrayBuffer) {
         this.enqueue(ev.data);
+        this.onAiAudio();
         return;
       }
       let msg: ServerMsg;

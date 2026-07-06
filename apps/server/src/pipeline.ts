@@ -22,6 +22,9 @@ export interface PipelineEvents {
  * leaves an audible gap between sentences.
  */
 const MIN_CHUNK = 60;
+
+/** Reply not underway within this window → play an acknowledgement filler. */
+const FILLER_AFTER_MS = 700;
 export async function* sentenceChunks(
   src: AsyncIterable<string>,
   onFirstDelta?: () => void,
@@ -374,19 +377,6 @@ export class VoicePipeline {
     const turn = this.deps.latency.startTurn();
     this.deps.events?.onCaption?.("candidate", userText);
 
-    // Mask planner latency with a short acknowledgement filler.
-    const fillers = this.deps.fillers;
-    if (fillers && fillers.length > 0) {
-      const filler = fillers[Math.floor(Math.random() * fillers.length)];
-      if (filler) {
-        turn.markFirstAudio();
-        for (const chunk of filler) {
-          if (ac.signal.aborted) break;
-          this.writeChunk(chunk);
-        }
-      }
-    }
-
     try {
       const sentences = sentenceChunks(this.deps.responder(userText, ac.signal), () =>
         turn.markLlmFirstToken(),
@@ -408,7 +398,33 @@ export class VoicePipeline {
         const r = await sentences.next();
         return r.done ? null : prepare(r.value);
       };
-      let cur = await pull();
+
+      const firstP = pull();
+      firstP.catch(() => {});
+      // Acknowledgement filler only when the reply is actually slow.
+      // Unconditional filler double-acked prefetched turns ("Oke." … "Oke,
+      // terima kasih…"), so race the first sentence against a short window.
+      const fillers = this.deps.fillers;
+      if (fillers && fillers.length > 0) {
+        const slow = await Promise.race([
+          firstP.then(
+            () => false,
+            () => false,
+          ),
+          new Promise<boolean>((r) => setTimeout(r, FILLER_AFTER_MS, true)),
+        ]);
+        if (slow && !ac.signal.aborted) {
+          const filler = fillers[Math.floor(Math.random() * fillers.length)];
+          if (filler) {
+            turn.markFirstAudio();
+            for (const chunk of filler) {
+              if (ac.signal.aborted) break;
+              this.writeChunk(chunk);
+            }
+          }
+        }
+      }
+      let cur = await firstP;
       while (cur) {
         if (ac.signal.aborted) return;
         const nextP = pull();
