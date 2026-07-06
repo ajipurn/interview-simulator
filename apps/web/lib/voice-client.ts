@@ -21,7 +21,8 @@ export type ServerMsg =
   | { type: "clear" }
   | { type: "progress"; current: number; total: number; phase: string }
   | { type: "scoring" }
-  | { type: "report"; report: GameReport };
+  | { type: "report"; report: GameReport }
+  | { type: "denied"; reason: string };
 
 const CAPTURE_WORKLET = `
 class Capture extends AudioWorkletProcessor {

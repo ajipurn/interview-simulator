@@ -9,6 +9,7 @@ process.env.STT_PROVIDER = "mock";
 process.env.LLM_PROVIDER = "mock";
 process.env.TTS_PROVIDER = "mock";
 process.env.PORT = "4111";
+process.env.MAX_ATTEMPTS = "9999"; // repeated smoke runs must not hit the budget gate
 process.env.MOCK_STT_SCRIPT = JSON.stringify([
   "Halo, nama saya kandidat demo, salam kenal.",
   "Saya punya pengalaman dua tahun di bidang ini.",

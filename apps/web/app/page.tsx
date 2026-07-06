@@ -109,7 +109,16 @@ export default function Game() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jobTitle: profile.role, candidateName: profile.name }),
       });
-      if (!res.ok) throw new Error(`server ${res.status}: ${await res.text()}`);
+      if (!res.ok) {
+        const body = await res.text();
+        let msg = `server ${res.status}: ${body}`;
+        try {
+          msg = (JSON.parse(body) as { error?: string }).error ?? msg;
+        } catch {
+          // non-JSON error body — keep the raw text
+        }
+        throw new Error(msg);
+      }
       const data = (await res.json()) as { sessionId: string };
       sessionRef.current = data.sessionId;
       setPhase("explore");
@@ -121,6 +130,14 @@ export default function Game() {
   };
 
   const handleMessage = useCallback((msg: ServerMsg) => {
+    if (msg.type === "denied") {
+      // attempt cap hit — back to the menu with the server's explanation
+      clientRef.current?.dispose();
+      clientRef.current = null;
+      setError(msg.reason);
+      setPhase("lobby");
+      return;
+    }
     if (msg.type === "caption")
       setCaptions((prev) => [...prev.slice(-3), { speaker: msg.speaker, text: msg.text }]);
     else if (msg.type === "progress") setProgress({ current: msg.current, total: msg.total });

@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { dirname, join } from "node:path";
 import {
   type CompetencySpec,
   type EngineConfig,
@@ -48,6 +50,69 @@ setInterval(
   10 * 60_000,
 ).unref();
 
+// --- budget guardrails ----------------------------------------------------
+// Real providers bill per call/minute; a public-ish game with no auth needs
+// server-side caps. Identity = client IP (good enough vs casual abuse).
+
+/** Lifetime interview attempts per IP (an attempt = the WS interview actually starts). */
+const MAX_ATTEMPTS = Number(process.env.MAX_ATTEMPTS ?? 2);
+/** Session creations per IP per day — every POST /session costs one rubric LLM call. */
+const MAX_SESSIONS_PER_DAY = Number(process.env.MAX_SESSIONS_PER_DAY ?? 6);
+/** Hard wall-clock cap per interview (STT streams per minute — the big leak). */
+const INTERVIEW_MAX_MS = Number(process.env.INTERVIEW_MAX_MS ?? 12 * 60_000);
+/** Mic open but nobody answering for this long → end the session. */
+const IDLE_MAX_MS = Number(process.env.IDLE_MAX_MS ?? 3 * 60_000);
+
+interface IpLimit {
+  starts: number;
+  day: string;
+  createdToday: number;
+}
+
+// file-backed so a server restart doesn't hand everyone fresh attempts
+const LIMITS_FILE = join(process.cwd(), "data", "limits.json");
+const limits = new Map<string, IpLimit>();
+try {
+  for (const [ip, v] of Object.entries(
+    JSON.parse(readFileSync(LIMITS_FILE, "utf8")) as Record<string, IpLimit>,
+  ))
+    limits.set(ip, v);
+} catch {
+  // first run — no file yet
+}
+function saveLimits(): void {
+  try {
+    mkdirSync(dirname(LIMITS_FILE), { recursive: true });
+    writeFileSync(LIMITS_FILE, JSON.stringify(Object.fromEntries(limits)));
+  } catch (err) {
+    console.error(JSON.stringify({ evt: "limits_save_failed", err: String(err) }));
+  }
+}
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+function limitFor(ip: string): IpLimit {
+  let lim = limits.get(ip);
+  if (!lim) {
+    lim = { starts: 0, day: today(), createdToday: 0 };
+    limits.set(ip, lim);
+  }
+  if (lim.day !== today()) {
+    lim.day = today();
+    lim.createdToday = 0;
+  }
+  return lim;
+}
+
+function clientIp(req: IncomingMessage): string {
+  const fwd = req.headers["x-forwarded-for"];
+  const first = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(",")[0]?.trim();
+  return first || req.socket.remoteAddress || "unknown";
+}
+
+const ATTEMPTS_EXHAUSTED =
+  "Jatah interview-mu sudah habis (maksimal 2 sesi per orang). Makasih sudah main!";
+
 const CORS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
@@ -71,11 +136,22 @@ const CreateSessionInput = z.object({
 });
 
 async function createSession(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const lim = limitFor(clientIp(req));
+  if (lim.starts >= MAX_ATTEMPTS) {
+    sendJson(res, 429, { error: ATTEMPTS_EXHAUSTED });
+    return;
+  }
+  if (lim.createdToday >= MAX_SESSIONS_PER_DAY) {
+    sendJson(res, 429, { error: "Terlalu banyak percobaan hari ini — coba lagi besok ya." });
+    return;
+  }
   const parsed = CreateSessionInput.safeParse(await readBody(req));
   if (!parsed.success) {
     sendJson(res, 400, { error: parsed.error.issues[0]?.message ?? "invalid input" });
     return;
   }
+  lim.createdToday++;
+  saveLimits();
   const { jobTitle, candidateName } = parsed.data;
   // player only types a position — synthesize a minimal JD for the rubric generator
   const jdText = `Posisi yang dilamar: ${jobTitle}. Wawancara kompetensi umum untuk peran ${jobTitle} di sebuah perusahaan di Indonesia.`;
@@ -163,12 +239,30 @@ async function runInterview(ws: WebSocket, req: IncomingMessage): Promise<void> 
     return;
   }
   const session: GameSession = found;
-  session.status = "live";
-  console.log(JSON.stringify({ evt: "game_start", id: session.id, job: session.config.jobTitle }));
 
   const send = (obj: unknown) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(obj));
   };
+
+  // attempt is spent when the interview actually starts (mic on = billing on)
+  const lim = limitFor(clientIp(req));
+  if (lim.starts >= MAX_ATTEMPTS) {
+    send({ type: "denied", reason: ATTEMPTS_EXHAUSTED });
+    ws.close(4429, "attempts exhausted");
+    return;
+  }
+  lim.starts++;
+  saveLimits();
+
+  session.status = "live";
+  console.log(
+    JSON.stringify({
+      evt: "game_start",
+      id: session.id,
+      job: session.config.jobTitle,
+      attempt: lim.starts,
+    }),
+  );
   const tts = ttsFromEnv();
   const sink: AudioSink = {
     write(chunk) {
@@ -295,6 +389,7 @@ async function runInterview(ws: WebSocket, req: IncomingMessage): Promise<void> 
   });
 
   ws.on("close", () => {
+    clearInterval(watchdog);
     void pipeline.stop().catch(() => {});
     // player left mid-interview: no resume in the game — session is spent
     if (!finished) {
@@ -303,6 +398,25 @@ async function runInterview(ws: WebSocket, req: IncomingMessage): Promise<void> 
       console.log(JSON.stringify({ evt: "game_abandoned", id: session.id }));
     }
   });
+
+  // budget watchdog: hard duration cap + idle cap (mic open, nobody answering —
+  // streaming STT bills per minute whether or not anyone speaks)
+  const startedAtMs = Date.now();
+  const watchdog = setInterval(() => {
+    if (finished) {
+      clearInterval(watchdog);
+      return;
+    }
+    const idleMs = Date.now() - engine.state.lastActiveAtMs;
+    const totalMs = Date.now() - startedAtMs;
+    if (totalMs > INTERVIEW_MAX_MS || idleMs > IDLE_MAX_MS) {
+      console.log(
+        JSON.stringify({ evt: "watchdog_finalize", id: session.id, totalMs, idleMs }),
+      );
+      void finalize().catch(console.error);
+    }
+  }, 15_000);
+  watchdog.unref();
 
   const greeting = engine.begin();
   await pipeline.say(greeting.utterance);

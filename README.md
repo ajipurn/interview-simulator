@@ -37,6 +37,14 @@ pnpm test       # unit test bawaan engine + voice-core
 
 WASD / panah = jalan (third person) · E dekat kursi = duduk & mulai interview · tombol "Akhiri wawancara" = selesai lebih awal.
 
+## Guardrails & budget
+
+Ucapan AI sudah lewat guardrail deterministik bawaan engine selia (anti bocor skor, redirect off-topic). Tambahan proteksi biaya di server (semua bisa dioverride via env, lihat `.env.example`):
+
+- **Maks 2 interview per IP, seumur hidup** — persist di `apps/server/data/limits.json` (hapus file untuk reset saat dev, atau set `MAX_ATTEMPTS`).
+- Maks 6 pembuatan session per IP per hari (tiap POST /session = 1 panggilan LLM rubric).
+- Watchdog: interview dipaksa selesai setelah 12 menit, atau 3 menit idle (mic nyala tanpa jawaban) — STT streaming dibayar per menit.
+
 ## Asset 3D
 
 Semua CC0 dari Kenney (License.txt ikut di tiap folder):
