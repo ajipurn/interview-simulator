@@ -9,9 +9,10 @@ import { type GameReport, rms, type ServerMsg, VoiceClient } from "../lib/voice-
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:4001";
 
-// kill switch: true = whole site shows the maintenance screen.
-// Flip back to false and redeploy to reopen.
-const MAINTENANCE = true;
+// kill switch: NEXT_PUBLIC_MAINTENANCE=1 shows the maintenance screen site-wide.
+// NEXT_PUBLIC_* is inlined at build time — changing it needs a redeploy, not
+// just a restart.
+const MAINTENANCE = process.env.NEXT_PUBLIC_MAINTENANCE === "1";
 
 const PROFILE_KEY = "sim.profile";
 const COMPLETED_KEY = "sim.completed";
