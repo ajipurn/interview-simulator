@@ -73,13 +73,30 @@ export function normalizeRegister(text: string): string {
   return text.replace(/\b[Aa]nda\b/g, "kamu");
 }
 
+// Every guarded utterance is mid-conversation (the scripted opener doesn't
+// pass through here), so a leading greeting is always a model re-greeting the
+// candidate — sounds like the interview restarted.
+const LEADING_GREETING =
+  /^\s*(?:(?:halo+|hai|hei|hey)|selamat\s+(?:pagi|siang|sore|malam|datang))[\s,!.…-]+/i;
+
+/** Strip re-greetings from the front of an utterance ("Halo! Ceritakan…" → "Ceritakan…"). */
+export function stripLeadingGreeting(text: string): string {
+  let out = text;
+  for (let i = 0; i < 3 && LEADING_GREETING.test(out); i++) {
+    out = out.replace(LEADING_GREETING, "");
+  }
+  if (out === text) return text;
+  if (!out.trim()) return text; // utterance was ONLY a greeting — empty is worse
+  return out.charAt(0).toUpperCase() + out.slice(1);
+}
+
 /**
  * Check an AI utterance. If it trips a rule, return `ok: false` with a safe
  * replacement (`text` = the caller-provided fallback) so the interview keeps
  * flowing; the caller must log the event to the audit trail.
  */
 export function checkUtterance(utterance: string, safeFallback: string): GuardrailResult {
-  const normalized = normalizeRegister(utterance);
+  const normalized = stripLeadingGreeting(normalizeRegister(utterance));
   for (const rule of [...PROHIBITED, ...PROMISES]) {
     if (rule.pattern.test(normalized)) {
       return { ok: false, text: safeFallback, topic: rule.topic, original: utterance };
