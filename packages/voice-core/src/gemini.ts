@@ -11,12 +11,32 @@ export function extractGeminiDelta(payload: string): string {
   return (event.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("");
 }
 
-/** Google Gemini (generativelanguage API) over fetch + SSE. */
+/**
+ * Google Gemini over fetch + SSE. Accepts both key flavors:
+ * - "AIza…" — Gemini API key → generativelanguage.googleapis.com
+ * - "AQ.…"  — Vertex AI express-mode key → aiplatform.googleapis.com
+ * Same request/response schema on both; only host and auth carrier differ
+ * (header vs documented ?key= query param).
+ */
 export class GeminiLlmProvider implements LlmProvider {
   constructor(
     private apiKey: string,
     private model: string = process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
   ) {}
+
+  private endpoint(): { url: string; headers: Record<string, string> } {
+    const base = { "content-type": "application/json" };
+    if (this.apiKey.startsWith("AQ.")) {
+      return {
+        url: `https://aiplatform.googleapis.com/v1/publishers/google/models/${this.model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(this.apiKey)}`,
+        headers: base,
+      };
+    }
+    return {
+      url: `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:streamGenerateContent?alt=sse`,
+      headers: { ...base, "x-goog-api-key": this.apiKey },
+    };
+  }
 
   async *stream(messages: LlmMessage[], opts?: LlmOptions): AsyncIterable<string> {
     const system = messages
@@ -30,10 +50,10 @@ export class GeminiLlmProvider implements LlmProvider {
         parts: [{ text: m.content }],
       }));
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:streamGenerateContent?alt=sse`;
+    const { url, headers } = this.endpoint();
     const res = await fetch(url, {
       method: "POST",
-      headers: { "x-goog-api-key": this.apiKey, "content-type": "application/json" },
+      headers,
       body: JSON.stringify({
         contents,
         systemInstruction: system ? { parts: [{ text: system }] } : undefined,
