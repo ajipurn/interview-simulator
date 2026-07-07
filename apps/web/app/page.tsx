@@ -9,6 +9,10 @@ import { type GameReport, rms, type ServerMsg, VoiceClient } from "../lib/voice-
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:4001";
 
+// kill switch: true = whole site shows the maintenance screen.
+// Flip back to false and redeploy to reopen.
+const MAINTENANCE = true;
+
 const PROFILE_KEY = "sim.profile";
 const COMPLETED_KEY = "sim.completed";
 
@@ -494,6 +498,19 @@ export default function Game() {
 
   const showForm = loaded && (editing || !profile);
   const showMenu = loaded && !editing && !!profile;
+
+  // after all hooks so the rules of hooks hold
+  if (MAINTENANCE)
+    return (
+      <div className="maintenance">
+        <h1>Lagi ada kendala teknis 🔧</h1>
+        <p>
+          Kantor virtual Selia tutup sementara buat perbaikan.
+          <br />
+          Coba main lagi nanti ya!
+        </p>
+      </div>
+    );
 
   return (
     <div className="game">
